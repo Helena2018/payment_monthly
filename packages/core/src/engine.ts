@@ -61,7 +61,7 @@ export interface AmortizationEntry {
   purchaseDate: ISODate;
   /** 摊销天数（购买日 → 月末，含两端）。 */
   spreadDays: number;
-  /** 每日摊销额（allocate 的众数份额，用于展示「每天多背 ¥143」）。 */
+  /** 每日摊销额（allocate 的众数份额，用于展示「每天多背 $143」）。 */
   dailyDragCents: Cents;
   /** 截至今日（含）已计入节奏口径的金额。 */
   chargedSoFarCents: Cents;
@@ -256,7 +256,7 @@ export function isBigTicket(
  * 单笔大额在「截至 today（含）」已摊销的金额。
  *
  * 摊销区间 = 购买日 → 月末（含两端），每日份额由 allocate 均分且 SUM 精确等于全额。
- * 这样做的产品意义：用户 20 号买了台电脑，真实余额立刻少 ¥3,000（不撒谎），
+ * 这样做的产品意义：用户 20 号买了台电脑，真实余额立刻少 $3,000（不撒谎），
  * 但「消费节奏」判断上它被摊到剩下的 11 天，AI 才不会冤枉用户「你今天花太疯了」，
  * 也不会让进度条瞬间爆红导致用户放弃月度预算。
  *

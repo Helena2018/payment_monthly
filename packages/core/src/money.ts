@@ -3,14 +3,15 @@
  *
  * 架构决策 ADR-001：全系统金额一律使用整数分（Cents），禁止浮点数做金额运算。
  *  - JS/Python 的 float 无法精确表示 0.1，预算类 App 一旦出现 0.01 的漂移，
- *    UI 上「¥2,340」和明细求和就会对不上，直接摧毁用户信任。
+ *    UI 上「$2,340」和明细求和就会对不上，直接摧毁用户信任。
  *  - TS 侧 number 在 2^53 以内是安全整数，个人月度预算量级远小于该上限。
  *  - 所有除法必须走 floorDiv / allocate，确保「分」不会凭空产生或消失。
  */
 
-/** 整数分。¥1 = 100。 */
+/** 整数分。$1 = 100。 */
 export type Cents = number;
 
+/** 主币单位（NZD「刀」）→ 分的换算常量；名字里的 YUAN 是历史命名，语义即「主币单位」。 */
 export const CENTS_PER_YUAN = 100;
 
 export function assertCents(value: number, name = 'cents'): Cents {

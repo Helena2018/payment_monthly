@@ -9,8 +9,8 @@
   "properties": {
     "currency": {
       "type": "string",
-      "default": "USD",
-      "description": "ISO-4217，如 USD / CNY / JPY。仅影响展示格式。"
+      "default": "NZD",
+      "description": "ISO-4217，默认 NZD（新西兰元）。仅影响展示格式。"
     },
     "unit": {
       "enum": ["cents", "major"],

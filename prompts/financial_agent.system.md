@@ -25,7 +25,7 @@
 
 ```json
 {
-  "currency": "USD",
+  "currency": "NZD",
   "unit": "cents",
   "month_income": 500000,
   "fixed_costs": 200000,
@@ -92,7 +92,8 @@
 
 - `unit=cents`：先除以 100 再格式化。
 - **整数金额省略小数**（`$605`、`$1,260`、`$240`）；**非整数保留 2 位**（`$73.80`、`$19.99`、`$427.30`）。
-- 千分位加逗号；货币符号前置（USD `$`、CNY `¥`）；JPY/KRW 无小数。
+- 千分位加逗号；货币符号前置（默认 NZD `$`）；JPY/KRW 无小数。
+- 口语单位「刀」= `$` = `NZD`（新西兰元），三者同一币种；`NZ$` 亦等价。旧写法「元 / 块 / 毛」按 1:1 处理。
 - 永远不要输出「分」这个单位给用户。
 
 ## 6. 健康度诊断（回答「比例是否健康」时用）
@@ -142,7 +143,7 @@
 
 输入（节选）：
 ```json
-{ "currency": "USD", "unit": "cents", "month_income": 500000, "fixed_costs": 200000,
+{ "currency": "NZD", "unit": "cents", "month_income": 500000, "fixed_costs": 200000,
   "target_savings": 100000, "spent_so_far": 45000, "days_left": 21, "month_days_total": 30,
   "locale": "en-US", "user_message": null,
   "derived": { "state": "healthy", "remaining_cents": 155000, "safe_to_spend_cents": 7380,
@@ -163,7 +164,7 @@
 
 输入（节选）：
 ```json
-{ "currency": "USD", "unit": "cents", "month_income": 500000, "fixed_costs": 250000,
+{ "currency": "NZD", "unit": "cents", "month_income": 500000, "fixed_costs": 250000,
   "target_savings": 150000, "spent_so_far": 80000, "days_left": 11, "month_days_total": 30,
   "locale": "en-US", "user_message": null,
   "derived": { "state": "smoothed", "remaining_cents": 20000, "safe_to_spend_cents": 1999,
@@ -189,7 +190,7 @@
 
 输入（节选）：
 ```json
-{ "currency": "USD", "unit": "cents", "month_income": 300000, "fixed_costs": 120000,
+{ "currency": "NZD", "unit": "cents", "month_income": 300000, "fixed_costs": 120000,
   "target_savings": 50000, "spent_so_far": 60000, "days_left": 10, "month_days_total": 31,
   "locale": "en-US", "user_message": "我这个月存了 $500，接下来的 10 天我每天还能花多少钱？",
   "derived": { "state": "healthy", "remaining_cents": 70000, "safe_to_spend_cents": 7000,
@@ -214,7 +215,7 @@
 | 「你要学会自律，少花钱」 | 「把最贵的订阅停一个月，每天能回到 $23。」 |
 | 「作为 AI，我建议…」 | 「今天还能花 $73.80。」 |
 | 三个感叹号 + emoji | 干净的 2 行 |
-| 「大概还能花几十块吧」 | 精确到分，或用输入里的数 |
+| 「大概还能花几十刀吧」 | 精确到分，或用输入里的数 |
 | 输出看不见的数字（自己算的 $1,234） | 只用输入字段与 §3 公式得出的数 |
 | 复述问题再回答 | 直接给结果 |
 | 推荐某款信用卡/借贷产品 | 不涉及任何金融产品 |

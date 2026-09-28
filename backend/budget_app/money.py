@@ -12,10 +12,11 @@ from __future__ import annotations
 import math
 from typing import Iterable, List
 
+#: 主币单位（NZD「刀」）→ 分的换算常量；名字里的 YUAN 是历史命名，语义即「主币单位」。
 CENTS_PER_YUAN = 100
 MAX_SAFE_INTEGER = 2**53 - 1
 
-#: 金额类型别名：整数分。¥1 = 100。
+#: 金额类型别名：整数分。$1 = 100。
 Cents = int
 
 

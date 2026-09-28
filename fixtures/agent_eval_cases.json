@@ -17,7 +17,7 @@
         ]
       },
       "agent_input": {
-        "currency": "USD",
+        "currency": "NZD",
         "unit": "cents",
         "month_income": 500000,
         "fixed_costs": 200000,
@@ -75,7 +75,7 @@
         ]
       },
       "agent_input": {
-        "currency": "USD",
+        "currency": "NZD",
         "unit": "cents",
         "month_income": 500000,
         "fixed_costs": 250000,
@@ -147,7 +147,7 @@
         ]
       },
       "agent_input": {
-        "currency": "USD",
+        "currency": "NZD",
         "unit": "cents",
         "month_income": 300000,
         "fixed_costs": 120000,

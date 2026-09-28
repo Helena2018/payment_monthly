@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#F5F6F8">
 <meta name="description" content="极简月度预算：只看三个数——本月还能花、今天还能花、固定开销与存款。数据只存在你的浏览器里。">
-<title>月月 · 极简月度预算</title>
+<!-- 使用 Base64/SVG 内联一个兔子图标，无需额外上传图片 -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐰</text></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐰</text></svg>">
+<title>· 极简月度预算 ·</title>
 <style>
 /* ============================================================
    设计令牌（与 docs/architecture.md 的视觉规范一致）
@@ -191,8 +194,8 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
   <!-- ① 首屏唯一大数字：今天还能花 -->
   <section class="card hero" id="hero" aria-live="polite">
     <div class="kicker" id="heroKicker">今天还能花</div>
-    <div class="amount num" id="todayAmount">¥0</div>
-    <div class="sub num" id="todaySub">今日已花 ¥0 · 今日额度 ¥0</div>
+    <div class="amount num" id="todayAmount">$0</div>
+    <div class="sub num" id="todaySub">今日已花 $0 · 今日额度 $0</div>
     <div style="margin-top:12px"><span class="chip" id="stateChip">—</span></div>
   </section>
 
@@ -203,7 +206,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
       <span class="small muted num" id="monthSpentPct">—</span>
     </div>
     <div class="row" style="align-items:flex-end">
-      <div class="num" style="font-size:30px;font-weight:750;letter-spacing:-.8px" id="monthRemain">¥0</div>
+      <div class="num" style="font-size:30px;font-weight:750;letter-spacing:-.8px" id="monthRemain">$0</div>
       <div class="tiny muted num" id="monthPace">—</div>
     </div>
     <div class="bar" id="monthBar">
@@ -211,9 +214,9 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
       <div class="pace" id="monthPaceMark" style="left:0%"></div>
     </div>
     <div class="pools">
-      <div class="pool"><div class="pk">收入</div><div class="pv num" id="poolIncome">¥0</div></div>
-      <div class="pool"><div class="pk">固定+存款</div><div class="pv num" id="poolCommitted">¥0</div></div>
-      <div class="pool"><div class="pk">日常已花</div><div class="pv num" id="poolSpent">¥0</div></div>
+      <div class="pool"><div class="pk">收入</div><div class="pv num" id="poolIncome">$0</div></div>
+      <div class="pool"><div class="pk">固定+存款</div><div class="pv num" id="poolCommitted">$0</div></div>
+      <div class="pool"><div class="pk">日常已花</div><div class="pv num" id="poolSpent">$0</div></div>
     </div>
   </section>
 
@@ -221,7 +224,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
   <section class="card">
     <div class="card-head"><span class="card-title">记一笔</span><span class="tiny muted" id="parseMode">本地解析</span></div>
     <form class="quickadd" id="addForm" autocomplete="off">
-      <input type="text" id="entryInput" placeholder="打车 35 / 买咖啡 15 块" enterkeyhint="done" aria-label="输入一笔开销，例如：打车 35">
+      <input type="text" id="entryInput" placeholder="打车 $35 / 买咖啡 15 刀" enterkeyhint="done" aria-label="输入一笔开销，例如：打车 $35">
       <button class="btn" type="submit" id="addBtn">记下</button>
     </form>
     <div class="seg" id="necessitySeg">
@@ -230,7 +233,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
       <span class="spacer"></span>
       <button class="tag" type="button" id="refundTag">记为退款</button>
     </div>
-    <div class="hint" id="addHint">直接输入「打车 35」即可；想一次记多笔，用 <b>/</b>、换行或逗号分隔，例如「打车 35 / 买咖啡 15」，会分别记成两笔。填入 API Key 后，会优先交给 AI 解析金额与备注。</div>
+    <div class="hint" id="addHint">直接输入「打车 35」即可；金额认 <b>$</b>、<b>刀</b>、<b>NZD</b>（新西兰元）。想一次记多笔，用 <b>/</b>、换行或逗号分隔，例如「打车 $35 / 买咖啡 15 刀」，会分别记成两笔。填入 API Key 后，会优先交给 AI 解析金额与备注。</div>
     <div class="hint" id="parsePreview" hidden></div>
   </section>
 
@@ -262,8 +265,8 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
   <!-- ⑦ 月度预算与存款设置 -->
   <section class="card" id="budgetCard">
     <div class="card-head"><span class="card-title">月度预算与存款设置</span><span class="tiny muted">月初锁定，可随时改</span></div>
-    <div class="field"><label for="incomeInput">月收入</label><input type="number" min="0" step="0.01" inputmode="decimal" id="incomeInput" placeholder="0"><span class="suffix">元</span></div>
-    <div class="field"><label for="savingsInput">计划存款</label><input type="number" min="0" step="0.01" inputmode="decimal" id="savingsInput" placeholder="0"><span class="suffix">元</span></div>
+    <div class="field"><label for="incomeInput">月收入</label><input type="number" min="0" step="0.01" inputmode="decimal" id="incomeInput" placeholder="0"><span class="suffix">刀</span></div>
+    <div class="field"><label for="savingsInput">计划存款</label><input type="number" min="0" step="0.01" inputmode="decimal" id="savingsInput" placeholder="0"><span class="suffix">刀</span></div>
     <div class="subrow">固定开销（房租/房贷、水电网、保险、订阅、贷款…）</div>
     <div class="list" id="fixedList"></div>
     <form class="field" id="fixedForm" autocomplete="off" style="border-bottom:0;padding-top:6px">
@@ -271,9 +274,9 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
       <input type="number" min="0" step="0.01" inputmode="decimal" id="fixedAmount" placeholder="金额">
       <button class="btn sm" type="submit">添加</button>
     </form>
-    <div class="sumrow"><span class="k">固定开销合计</span><span class="v num" id="budgetFixedTotal">¥0</span></div>
-    <div class="sumrow"><span class="k">计划存款</span><span class="v num" id="budgetSavingsTotal">¥0</span></div>
-    <div class="sumrow total"><span class="k">本月日常可用</span><span class="v num" id="budgetDiscretionary">¥0</span></div>
+    <div class="sumrow"><span class="k">固定开销合计</span><span class="v num" id="budgetFixedTotal">$0</span></div>
+    <div class="sumrow"><span class="k">计划存款</span><span class="v num" id="budgetSavingsTotal">$0</span></div>
+    <div class="sumrow total"><span class="k">本月日常可用</span><span class="v num" id="budgetDiscretionary">$0</span></div>
     <div class="sumrow"><span class="k">摊到每天（日基线）</span><span class="v num" id="budgetDaily">—</span></div>
     <div class="hint" id="budgetHint">固定开销与计划存款在月初优先扣掉，剩下的才进入可花的日常额度 —— 所以房租不会被日常消费花掉。</div>
   </section>
@@ -289,7 +292,7 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
 <div class="sheet" id="settingsSheet" role="dialog" aria-modal="true" aria-label="设置">
   <div class="grip"></div>
   <h3>设置</h3>
-  <div class="sheet-sub">先看 AI 解析：填 Key 后，「买咖啡 15 块」这类句子会交给大模型解析成金额与备注。</div>
+  <div class="sheet-sub">先看 AI 解析：填 Key 后，「买咖啡 15 刀」这类句子会交给大模型解析成金额与备注。</div>
 
   <div class="field">
     <label for="providerSelect">服务商</label>
@@ -357,6 +360,11 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
    跑 fixtures/golden_cases.json 的同一份黄金向量，保证网页版与 Python/TS 引擎逐位一致）
    ========================================================================== */
 
+/* ---------- 币种：新西兰元（NZD）----------
+ * 展示符号 `$`、口语单位「刀」——全站唯一的币种口径，别在别处硬编码符号。
+ */
+const CURRENCY = { code: "NZD", symbol: "$", colloquial: "刀" };
+
 /* ---------- 金额：一律整数分（ADR-001） ---------- */
 const CENTS = 100;
 const DEFAULT_CONFIG = { floorRatio: 0.6, bigTicketRatio: 2.0, paceTolerance: 0.08,
@@ -376,7 +384,8 @@ function allocate(total, parts) {
   for (let i = 0; i < rem; i++) out[i] += 1;
   return out.map((v) => v * sign);
 }
-/** 元字符串 → 分，绕开 parseFloat*100 的浮点误差 */
+/** 金额字符串（「12.3」/「$12.3」已先由 pickAmountText 剥壳）→ 分，绕开 parseFloat*100 的浮点误差
+ *  （历史命名 yuanToCents：语义即「主币单位 → 分」） */
 function yuanToCents(text) {
   const s = String(text == null ? "" : text).trim().replace(/[,\s]/g, "");
   const m = /^(-?)(\d*)(?:\.(\d{0,2}))?$/.exec(s);
@@ -388,7 +397,7 @@ function yuanToCents(text) {
 }
 /** 分 → 展示串。规则与 prompts/financial_agent.system.md §5 一致：整数省略小数 */
 function fmtCents(cents, symbol) {
-  const sym = symbol == null ? "¥" : symbol;
+  const sym = symbol == null ? CURRENCY.symbol : symbol;
   const neg = cents < 0;
   const abs = Math.abs(cents);
   const yuan = Math.floor(abs / CENTS);
@@ -805,24 +814,67 @@ function gentleMessage(snap, input) {
 
 /* ---------- 自然语言记账：本地解析（无网络也能用） ---------- */
 const NECESSARY_HINTS = /饭|餐|菜|米|面|早点|早餐|午饭|晚饭|外卖|超市|生鲜|菜场|药|医院|挂号|体检|地铁|公交|打车|机票|火车|加油|停车|过路|房租|房贷|水费|电费|燃气|物业|话费|宽带|学费|保险|快递|奶粉|尿布/;
-const NOISE_WORDS = /(刚刚|刚才|今天|昨天|早上|中午|晚上|花了|支付了|付了|买了|买点|买个|用了|元|块钱|块|毛|角|人民币|RMB|CNY)/g;
+/** 口语噪声词。币种词按新口径（刀/NZD/$）在前，旧写法（元/块/毛/角…）在后兜底。
+ *  注意「块钱」「新西兰元」必须排在「块」「元」前面，否则会被拆成半个词。 */
+const NOISE_WORDS = /(刚刚|刚才|今天|昨天|早上|中午|晚上|花了|支付了|付了|买了|买点|买个|用了|块钱|块|毛|角|新西兰元|元|纽刀|纽币|人民币|NZD|NZ\$|dollars?|RMB|CNY|USD)/gi;
+
+/**
+ * 金额提取的优先级（这是「优先解析 $ / 刀 / NZD」的落点）：
+ *   ① `$` / `NZ$`（前置或后置） ② `刀` ③ `NZD` / 纽刀 / 纽币 / 新西兰元
+ *   ④ 旧写法（元 / 块 / 毛 / 角 / 人民币 / RMB / CNY） ⑤ 兜底的裸数字
+ * 带币种标记的数字一定赢过裸数字，所以「昨天 2 号 打车 $35」不会被解析成 $2。
+ */
+const AMOUNT_PATTERNS = [
+  /(?:\$|NZ\$)\s*(-?\d+(?:\.\d{1,2})?)/i,                             // $35 / NZ$ 35
+  /(-?\d+(?:\.\d{1,2})?)\s*(?:NZ\$|\$)/i,                             // 35$ / 35 NZ$
+  /刀\s*(-?\d+(?:\.\d{1,2})?)/,                                       // 刀35
+  /(-?\d+(?:\.\d{1,2})?)\s*刀/,                                       // 35 刀
+  /(?:NZD|纽刀|纽币|新西兰元)\s*(-?\d+(?:\.\d{1,2})?)/i,               // NZD 35
+  /(-?\d+(?:\.\d{1,2})?)\s*(?:NZD|纽刀|纽币|新西兰元)/i,                // 35 NZD
+  /(?:人民币|RMB|CNY)\s*(-?\d+(?:\.\d{1,2})?)/i,                      // 旧写法
+  /(-?\d+(?:\.\d{1,2})?)\s*(?:块钱|块|毛|角|元)/,                      // 旧写法：35 元 / 15 块
+];
+const BARE_AMOUNT = /(-?\d+(?:\.\d{1,2})?)/;
+
+/** 找出这句话里该当金额的那个数字（带币种标记的优先） */
+function pickAmountText(text) {
+  for (const re of AMOUNT_PATTERNS) {
+    const m = re.exec(text);
+    if (m) return m[1];
+  }
+  const bare = BARE_AMOUNT.exec(text);
+  return bare ? bare[1] : null;
+}
+
+/** 备注里不该留下「另一个带标记的金额」（如「买菜 $30 加油 $40」只剩备注） */
+function stripCurrencyMarks(text) {
+  let out = text;
+  for (const re of AMOUNT_PATTERNS) {
+    out = out.replace(new RegExp(re.source, re.flags.indexOf("i") >= 0 ? "gi" : "g"), " ");
+  }
+  return out;
+}
 
 function guessNecessity(text) { return NECESSARY_HINTS.test(text) ? "necessary" : "optional"; }
 
 /**
  * 「打车 35」→ { amountCents: 3500, note: "打车", necessity: "necessary" }
+ * 「打车 $35」「打车 35 刀」「打车 NZD 35」等价。
  * 设计原则：只提取「金额 + 备注 + 一个二元标记」，绝不要求分类树。
  */
 function parseQuickEntry(raw) {
   const text = String(raw == null ? "" : raw).trim();
   if (!text) return null;
-  const m = /(-?\d+(?:\.\d{1,2})?)/.exec(text);
-  if (!m) return null;
-  const parsed = yuanToCents(m[1]);
+  const amountText = pickAmountText(text);
+  if (amountText == null) return null;
+  const parsed = yuanToCents(amountText);
   if (parsed == null || parsed === 0) return null;
   const isRefund = parsed < 0 || /退款|退货|报销|返现/.test(text);
-  const note = text.replace(m[1], " ").replace(/[¥￥]/g, " ").replace(NOISE_WORDS, " ")
-    .replace(/退款|退货|报销|返现/g, " ").replace(/\s+/g, " ").trim();
+  const note = stripCurrencyMarks(text).replace(amountText, " ").replace(/[¥￥$]/g, " ")
+    .replace(NOISE_WORDS, " ").replace(/退款|退货|报销|返现/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s\-–—~·、,，。;；/|]+|[\s\-–—~·、,，。;；/|]+$/g, "")
+    .trim();
   return {
     amountCents: Math.abs(parsed),
     note: note || "未备注",
@@ -837,13 +889,13 @@ function parseQuickEntry(raw) {
 /** 显式分隔符：换行 / 斜杠 / 竖线 / 分号 / 逗号 / 顿号，以及「还有、以及、然后」这类连接词 */
 const QUICK_ENTRY_DELIMITERS = /[\n\r/／|｜;；,，、]+|\s*(?:还有|以及|然后|并且)\s*/;
 /** 「金额 + 空白 + 下一句」的边界（只用前瞻，不用后顾，兼容旧版 Safari 的正则引擎） */
-const QUICK_ENTRY_BOUNDARY = /(\d(?:\.\d{1,2})?(?:\s*(?:元|块钱|块|毛|角))?)\s+(?=[\u4e00-\u9fa5A-Za-z])/g;
+const QUICK_ENTRY_BOUNDARY = /(\d(?:\.\d{1,2})?(?:\s*(?:刀|NZD|NZ\$|块钱|块|毛|角|元))?)\s+(?=[\u4e00-\u9fa5A-Za-z])/g;
 const QUICK_ENTRY_CUT = "\u0000";
 
 /**
  * 把一句输入拆成「单笔片段」列表：
- *   「打车 35 / 买咖啡 15」    → ["打车 35", "买咖啡 15"]
- *   「打车 35，买咖啡 15 块」  → ["打车 35", "买咖啡 15 块"]
+ *   「打车 35 / 买咖啡 15」     → ["打车 35", "买咖啡 15"]
+ *   「打车 $35，买咖啡 15 刀」  → ["打车 $35", "买咖啡 15 刀"]
  *   「打车 35」               → ["打车 35"]（单笔时行为与改动前完全一致）
  * 注意：不带分隔符的空格切分是「猜」的 —— 空格切出的片段若不含数字就并回上一段，
  * 想 100% 确定请用 / 或换行。
@@ -879,7 +931,7 @@ function parseQuickEntries(raw) {
 
 /* ---------- 供 tools/validate_webapp_core.js 及 UI 复用 ---------- */
 globalThis.Core = {
-  CENTS: CENTS, DEFAULT_CONFIG: DEFAULT_CONFIG,
+  CENTS: CENTS, CURRENCY: CURRENCY, DEFAULT_CONFIG: DEFAULT_CONFIG,
   floorDiv: floorDiv, allocate: allocate, yuanToCents: yuanToCents, fmtCents: fmtCents,
   sumCents: sumCents, effectiveFixedCents: effectiveFixedCents, resolveSavingsCents: resolveSavingsCents,
   daysInMonthOf: daysInMonthOf, daysLeftInclusive: daysLeftInclusive, resolveDueDay: resolveDueDay,
@@ -889,7 +941,7 @@ globalThis.Core = {
   computeSnapshot: computeSnapshot, rescheduleDailyAllowances: rescheduleDailyAllowances,
   projectedCarryoverCents: projectedCarryoverCents,
   buildAlerts: buildAlerts, gentleMessage: gentleMessage,
-  parseQuickEntry: parseQuickEntry, guessNecessity: guessNecessity,
+  parseQuickEntry: parseQuickEntry, guessNecessity: guessNecessity, pickAmountText: pickAmountText,
   splitQuickEntries: splitQuickEntries, parseQuickEntries: parseQuickEntries,
 };
 /* ==CORE_END== */
@@ -1022,14 +1074,16 @@ function buildParseSystemPrompt(today) {
     "你是一个记账解析器，只做一件事：把用户的一句话解析成 JSON。",
     "今天是 " + today + "。",
     "输出字段：",
-    '  "amount": 数字，单位「元」，支出为正、退款为负；解析不出填 null',
+    '  "amount": 数字，单位「刀」（新西兰元 NZD，符号 $），支出为正、退款为负；解析不出填 null',
     '  "note": 字符串，6 个汉字以内的简短备注，如「打车」「咖啡」；不确定填「未备注」',
     '  "necessity": "necessary" 表示生存/通勤/医疗/账单类，"optional" 表示娱乐/零食/非必需',
     '  "date": "YYYY-MM-DD"，仅当用户明确提到别的日期时才填，否则 null',
     "规则：",
     "1) 只输出 JSON 本体，不要 markdown 代码块、不要解释、不要多余文字。",
     "2) 不要做任何预算计算，不要给建议，不要反问，不要输出除以上四个字段外的内容。",
-    "3) 金额里出现「万」按 10000 换算；「块/元/毛」等口语词按常识处理。",
+    "3) 币种为新西兰元：$、NZ$、刀、NZD 都是同一币种；金额锚点优先取这些标记旁边的数字，"
+      + "没有标记时才用句中唯一的数字。",
+    "4) 早年的「元 / 块 / 毛」按 1:1 当作刀处理；金额里出现「万」按 10000 换算。",
   ].join("\n");
 }
 

@@ -46,7 +46,7 @@
     },
     {
       "name": "02_big_ticket_smoothed",
-      "note": "核心场景：月中买大件 ¥3000，真值日均跌破保底线 → 展示 floor 保底，缺口记为月末调节项；但节奏口径因平摊而不报警 T1",
+      "note": "核心场景：月中买大件 $3000，真值日均跌破保底线 → 展示 floor 保底，缺口记为月末调节项；但节奏口径因平摊而不报警 T1",
       "today": "2026-09-20",
       "budget": { "id": "b2", "month": "2026-09", "incomeCents": 1000000 },
       "fixedExpenses": [
@@ -138,7 +138,7 @@
     },
     {
       "name": "04_refund_and_bill_variance",
-      "note": "浮动账单实际>预估（电费多 ¥40）自动回冲 + 退款为负额自动加回余额",
+      "note": "浮动账单实际>预估（电费多 $40）自动回冲 + 退款为负额自动加回余额",
       "today": "2026-09-16",
       "budget": { "id": "b4", "month": "2026-09", "incomeCents": 1000000 },
       "fixedExpenses": [
@@ -225,7 +225,7 @@
     },
     {
       "name": "06_carryover_from_previous_month",
-      "note": "上月透支 ¥300 写入 carryoverCents=-30000，直接压低本月可支配总额",
+      "note": "上月透支 $300 写入 carryoverCents=-30000，直接压低本月可支配总额",
       "today": "2026-10-05",
       "budget": {
         "id": "b6",

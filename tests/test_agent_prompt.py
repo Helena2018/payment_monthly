@@ -290,13 +290,20 @@ CURRENCY_FORMAT_PROBE = {
     42730: "$427.30",
 }
 
-AMOUNT_RE = re.compile(r"[¥$€£]\s?(\d[\d,]*(?:\.\d{2})?)")
+# 币种口径（NZD）：提示词里的 `$` / 刀 / NZD 是同一个币种，先归一化再用同一条规则抽金额
+CURRENCY_MARK_RE = re.compile(r"NZD|NZ\$|刀")
+AMOUNT_RE = re.compile(r"[$€£]\s?(\d[\d,]*(?:\.\d{2})?)")
+
+
+def normalize_amount_marks(text: str) -> str:
+    """把 `刀` / `NZD` / `NZ$` 归一成 `$`，让金额校验只认一种币种标记。"""
+    return CURRENCY_MARK_RE.sub("$", text)
 
 
 def extracted_cents(text: str) -> list[int]:
     """从一句话里抽出所有金额（分），用于反向校验「提示词里的数字必须来自引擎」。"""
     out = []
-    for body in AMOUNT_RE.findall(text):
+    for body in AMOUNT_RE.findall(normalize_amount_marks(text)):
         whole, _, fraction = body.replace(",", "").partition(".")
         out.append(int(whole) * 100 + (int(fraction) if fraction else 0))
     return out
@@ -306,6 +313,15 @@ def extracted_cents(text: str) -> list[int]:
 def test_amount_formatting_rule(cents: int, rendered: str) -> None:
     """§5 金额规则的代码参考实现：整数省略小数、非整数保留 2 位、千分位加逗号。"""
     assert format_display(cents) == rendered, f"{cents} 分应渲染为 {rendered}"
+
+
+def test_currency_convention_is_nzd() -> None:
+    """币种全站统一为 NZD（展示符号 $、口语单位「刀」）：提示词与 schema 必须同步。"""
+    assert SCHEMA["properties"]["currency"]["default"] == "NZD", "schema 默认币种应为 NZD"
+    assert '"currency": "NZD"' in PROMPT, "提示词示例里的 currency 应为 NZD"
+    assert "刀" in PROMPT, "提示词应说明口语单位「刀」与 $ / NZD 等价"
+    assert "¥" not in PROMPT, "提示词里不应再出现人民币符号 ¥"
+    assert normalize_amount_marks("打车 35 刀") == "打车 35 $", "刀 应归一成 $"
 
 
 @pytest.mark.parametrize("case", CASES, ids=CASE_IDS)
@@ -351,7 +367,7 @@ def test_few_shot_outputs_obey_line_limit() -> None:
     for index, block in enumerate(blocks, start=1):
         lines = [line for line in block.strip().splitlines() if line.strip()]
         assert 1 <= len(lines) <= 3, f"示例 {index} 有 {len(lines)} 行，违反「最多 3 行」规则"
-        assert re.search(r"[$¥€£]\s?\d", lines[0]), f"示例 {index} 第 1 行必须含金额"
+        assert re.search(r"[$€£]\s?\d", normalize_amount_marks(lines[0])), f"示例 {index} 第 1 行必须含金额"
 
 
 def test_few_shot_outputs_have_no_shaming() -> None:

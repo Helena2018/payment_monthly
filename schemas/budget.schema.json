@@ -7,7 +7,7 @@
   "$defs": {
     "Cents": {
       "type": "integer",
-      "description": "整数分。¥1 = 100。禁止 float。"
+      "description": "整数分。$1 = 100。禁止 float。"
     },
     "DueDay": {
       "oneOf": [

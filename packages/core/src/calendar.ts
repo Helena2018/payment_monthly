@@ -117,7 +117,7 @@ export function dateRange(today: ISODate, days: number): ISODate[] {
   return out;
 }
 
-/** 仅用于展示层：把分/天换算成「约 ¥x/天」的日均口径（不做业务计算）。 */
+/** 仅用于展示层：把分/天换算成「约 $x/天」的日均口径（不做业务计算）。 */
 export function perDay(total: Cents, days: number): Cents {
   if (days <= 0) return 0;
   return Math.floor(total / days);

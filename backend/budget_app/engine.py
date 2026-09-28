@@ -638,7 +638,7 @@ def compute_borrow_to_exit_floor(snapshot_input: SnapshotInput, max_iterations: 
     """求解让真值日均回到 floor 之上所需的最小借入额。
 
     这是**不动点问题**：借入 X → F'=F+X → 日基线 B'=F'/N 变大 → floor' 也变大。
-    例：F=¥6,000、已花 ¥4,800、剩 11 天 → 朴素缺口 ¥120，实际需要借 ¥153.77。
+    例：F=$6,000、已花 $4,800、剩 11 天 → 朴素缺口 $120，实际需要借 $153.77。
     """
     borrow = 0
     for _ in range(max_iterations):

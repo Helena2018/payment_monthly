@@ -1,7 +1,7 @@
 /**
  * reschedule.test.ts — 异常处理：大额超支后的额度平摊与「健康额度」重建
  *
- * 使用与 fixtures 第 2 号用例相同的场景（¥10,000 收入、月中买 ¥3,000 电脑），
+ * 使用与 fixtures 第 2 号用例相同的场景（$10,000 收入、月中买 $3,000 电脑），
  * 断言用户能看到的每一个补救选项及其代价。
  */
 
@@ -110,7 +110,7 @@ test('场景基线：当日额度被保底线接住，缺口显式记为月末�
   assert.equal(classifyOverspendLevel(s), 'severe');
 });
 
-test('额度排期：保底模式下每天 ¥120，缺口逐日累积，月末正好等于 monthEndAdjustment', () => {
+test('额度排期：保底模式下每天 $120，缺口逐日累积，月末正好等于 monthEndAdjustment', () => {
   const s = computeSnapshot(severeInput());
   const schedule = rescheduleDailyAllowances(s, 11);
   assert.equal(schedule.length, 11);
