@@ -123,6 +123,19 @@ function main() {
     ["parseQuickEntry('买咖啡 15 块').note", core.parseQuickEntry("买咖啡 15 块").note, "买咖啡"],
     ["parseQuickEntry('退款 50').isRefund", core.parseQuickEntry("退款 50").isRefund, true],
     ["parseQuickEntry('随便逛逛')", core.parseQuickEntry("随便逛逛"), null],
+    // 多笔拆分（「打车 35 / 买咖啡 15」→ 两条独立记录）
+    ["splitQuickEntries('打车 35 / 买咖啡 15').length", core.splitQuickEntries("打车 35 / 买咖啡 15").length, 2],
+    ["splitQuickEntries('打车 35').length", core.splitQuickEntries("打车 35").length, 1],
+    ["parseQuickEntries('打车 35 / 买咖啡 15').length", core.parseQuickEntries("打车 35 / 买咖啡 15").length, 2],
+    ["parseQuickEntries 第 2 笔金额", core.parseQuickEntries("打车 35 / 买咖啡 15")[1].amountCents, 1500],
+    ["parseQuickEntries 第 2 笔备注", core.parseQuickEntries("打车 35 / 买咖啡 15")[1].note, "买咖啡"],
+    ["parseQuickEntries 第 2 笔必要性", core.parseQuickEntries("打车 35 / 买咖啡 15")[1].necessity, "optional"],
+    ["parseQuickEntries 换行分隔", core.parseQuickEntries("打车 35\n买咖啡 15").length, 2],
+    ["parseQuickEntries 空格分隔", core.parseQuickEntries("打车 35 买咖啡 15").length, 2],
+    ["parseQuickEntries 顿号+连接词", core.parseQuickEntries("打车 35、买咖啡 15 还有午饭 28").length, 3],
+    ["parseQuickEntries 单笔长度", core.parseQuickEntries("打车 35").length, 1],
+    ["parseQuickEntries 退款标记", core.parseQuickEntries("退款 50 / 超市 120")[0].isRefund, true],
+    ["parseQuickEntries('随便逛逛')", JSON.stringify(core.parseQuickEntries("随便逛逛")), "[]"],
   ];
   console.log("");
   for (const [label, got, want] of extras) {

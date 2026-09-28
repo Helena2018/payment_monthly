@@ -137,6 +137,14 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
 .field .suffix{flex:none;font-size:13px;color:var(--muted);font-weight:600}
 .subrow{font-size:11px;color:var(--muted);margin:-4px 0 8px}
 
+/* ---------- 预算汇总行（月度预算与存款设置） ---------- */
+.sumrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:6px 0;font-size:13px}
+.sumrow .k{color:var(--muted);font-weight:600}
+.sumrow .v{font-weight:700}
+.sumrow.total{border-top:1px dashed var(--line-strong);margin-top:6px;padding-top:10px}
+.sumrow.total .k{color:var(--ink)}
+.sumrow.total .v{font-size:16px;letter-spacing:-.3px}
+
 /* ---------- 结构诊断 ---------- */
 .diag{display:flex;flex-direction:column;gap:12px}
 .diag .d-top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
@@ -222,7 +230,8 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
       <span class="spacer"></span>
       <button class="tag" type="button" id="refundTag">记为退款</button>
     </div>
-    <div class="hint" id="addHint">直接输入「打车 35」即可。填入 API Key 后，会优先交给 AI 解析金额与备注。</div>
+    <div class="hint" id="addHint">直接输入「打车 35」即可；想一次记多笔，用 <b>/</b>、换行或逗号分隔，例如「打车 35 / 买咖啡 15」，会分别记成两笔。填入 API Key 后，会优先交给 AI 解析金额与备注。</div>
+    <div class="hint" id="parsePreview" hidden></div>
   </section>
 
   <!-- ④ 今日明细 -->
@@ -250,11 +259,11 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
     <div class="diag" id="diag"></div>
   </section>
 
-  <!-- ⑦ 本月计划 -->
-  <section class="card">
-    <div class="card-head"><span class="card-title">本月计划</span><span class="tiny muted">月初锁定，可随时改</span></div>
+  <!-- ⑦ 月度预算与存款设置 -->
+  <section class="card" id="budgetCard">
+    <div class="card-head"><span class="card-title">月度预算与存款设置</span><span class="tiny muted">月初锁定，可随时改</span></div>
     <div class="field"><label for="incomeInput">月收入</label><input type="number" min="0" step="0.01" inputmode="decimal" id="incomeInput" placeholder="0"><span class="suffix">元</span></div>
-    <div class="field"><label for="savingsInput">存款目标</label><input type="number" min="0" step="0.01" inputmode="decimal" id="savingsInput" placeholder="0"><span class="suffix">元</span></div>
+    <div class="field"><label for="savingsInput">计划存款</label><input type="number" min="0" step="0.01" inputmode="decimal" id="savingsInput" placeholder="0"><span class="suffix">元</span></div>
     <div class="subrow">固定开销（房租/房贷、水电网、保险、订阅、贷款…）</div>
     <div class="list" id="fixedList"></div>
     <form class="field" id="fixedForm" autocomplete="off" style="border-bottom:0;padding-top:6px">
@@ -262,7 +271,11 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);ou
       <input type="number" min="0" step="0.01" inputmode="decimal" id="fixedAmount" placeholder="金额">
       <button class="btn sm" type="submit">添加</button>
     </form>
-    <div class="hint">固定开销与存款在月初优先扣掉，剩下的才进入可花的日常额度 —— 所以房租不会被日常消费花掉。</div>
+    <div class="sumrow"><span class="k">固定开销合计</span><span class="v num" id="budgetFixedTotal">¥0</span></div>
+    <div class="sumrow"><span class="k">计划存款</span><span class="v num" id="budgetSavingsTotal">¥0</span></div>
+    <div class="sumrow total"><span class="k">本月日常可用</span><span class="v num" id="budgetDiscretionary">¥0</span></div>
+    <div class="sumrow"><span class="k">摊到每天（日基线）</span><span class="v num" id="budgetDaily">—</span></div>
+    <div class="hint" id="budgetHint">固定开销与计划存款在月初优先扣掉，剩下的才进入可花的日常额度 —— 所以房租不会被日常消费花掉。</div>
   </section>
 
   <div class="footnote">
@@ -730,7 +743,7 @@ function gentleMessage(snap, input) {
   if (snap.state === "onboarding") {
     return { tone: "info", code: "ONBOARDING",
       headline: "先填一下本月收入，我就能算出今天能花多少。",
-      advice: "固定开销和存款目标各填一次，之后每个月自动沿用。",
+      advice: "月收入、固定开销与计划存款各填一次，之后每个月自动沿用。",
       ops: [{ action: "openPlan", label: "去填写" }] };
   }
 
@@ -819,6 +832,51 @@ function parseQuickEntry(raw) {
   };
 }
 
+/* ---------- 多笔拆分：把「打车 35 / 买咖啡 15」变成两条独立记录 ---------- */
+
+/** 显式分隔符：换行 / 斜杠 / 竖线 / 分号 / 逗号 / 顿号，以及「还有、以及、然后」这类连接词 */
+const QUICK_ENTRY_DELIMITERS = /[\n\r/／|｜;；,，、]+|\s*(?:还有|以及|然后|并且)\s*/;
+/** 「金额 + 空白 + 下一句」的边界（只用前瞻，不用后顾，兼容旧版 Safari 的正则引擎） */
+const QUICK_ENTRY_BOUNDARY = /(\d(?:\.\d{1,2})?(?:\s*(?:元|块钱|块|毛|角))?)\s+(?=[\u4e00-\u9fa5A-Za-z])/g;
+const QUICK_ENTRY_CUT = "\u0000";
+
+/**
+ * 把一句输入拆成「单笔片段」列表：
+ *   「打车 35 / 买咖啡 15」    → ["打车 35", "买咖啡 15"]
+ *   「打车 35，买咖啡 15 块」  → ["打车 35", "买咖啡 15 块"]
+ *   「打车 35」               → ["打车 35"]（单笔时行为与改动前完全一致）
+ * 注意：不带分隔符的空格切分是「猜」的 —— 空格切出的片段若不含数字就并回上一段，
+ * 想 100% 确定请用 / 或换行。
+ */
+function splitQuickEntries(raw) {
+  const text = String(raw == null ? "" : raw).trim();
+  if (!text) return [];
+  const chunks = [];
+  for (const part of text.split(QUICK_ENTRY_DELIMITERS)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const local = [];
+    for (const piece of trimmed.replace(QUICK_ENTRY_BOUNDARY, "$1" + QUICK_ENTRY_CUT).split(QUICK_ENTRY_CUT)) {
+      const seg = piece.trim();
+      if (!seg) continue;
+      if (local.length && !/\d/.test(seg)) local[local.length - 1] += " " + seg;  // 见上方说明
+      else local.push(seg);
+    }
+    chunks.push(...local);
+  }
+  return chunks;
+}
+
+/** 「打车 35 / 买咖啡 15」→ 两条解析结果；每条的备注与必要性各自判断 */
+function parseQuickEntries(raw) {
+  const list = [];
+  for (const chunk of splitQuickEntries(raw)) {
+    const parsed = parseQuickEntry(chunk);
+    if (parsed) list.push(parsed);
+  }
+  return list;
+}
+
 /* ---------- 供 tools/validate_webapp_core.js 及 UI 复用 ---------- */
 globalThis.Core = {
   CENTS: CENTS, DEFAULT_CONFIG: DEFAULT_CONFIG,
@@ -832,6 +890,7 @@ globalThis.Core = {
   projectedCarryoverCents: projectedCarryoverCents,
   buildAlerts: buildAlerts, gentleMessage: gentleMessage,
   parseQuickEntry: parseQuickEntry, guessNecessity: guessNecessity,
+  splitQuickEntries: splitQuickEntries, parseQuickEntries: parseQuickEntries,
 };
 /* ==CORE_END== */
 
@@ -1347,12 +1406,35 @@ function renderFixedList() {
   }
 }
 
-function renderPlanInputs() {
+function renderBudgetCard(snap) {
   const m = currentMonth();
+  const money = Core.fmtCents;
   setInputValue($("incomeInput"), m.incomeCents ? m.incomeCents / 100 : "");
   const goal = m.savings[0];
   setInputValue($("savingsInput"), goal && goal.targetCents ? goal.targetCents / 100 : "");
   setInputValue($("floorRatioInput"), store.config.floorRatio);
+
+  // 汇总：收入 − 固定开销 − 计划存款 = 可花的日常额度
+  $("budgetFixedTotal").textContent = money(snap.hardExpenseCents);
+  $("budgetSavingsTotal").textContent = money(snap.savingsCents);
+  const free = $("budgetDiscretionary");
+  free.textContent = snap.discretionaryCents < 0
+    ? "-" + money(Math.abs(snap.discretionaryCents)) : money(snap.discretionaryCents);
+  free.style.color = snap.discretionaryCents < 0 ? "var(--danger)" : "var(--ink)";
+  $("budgetDaily").textContent = snap.baselineCents > 0
+    ? money(snap.baselineCents) + " / 天 · " + snap.totalDays + " 天"
+    : "—";
+
+  const hint = $("budgetHint");
+  if (!snap.incomeCents) {
+    hint.textContent = "先填月收入，固定开销与计划存款会被优先扣掉，剩下的才进入可花的日常额度。";
+  } else if (snap.discretionaryCents < 0) {
+    hint.textContent = "固定开销 + 计划存款已经超过收入 " + money(Math.abs(snap.discretionaryCents))
+      + " —— 要么砍固定开销，要么调低计划存款。";
+  } else {
+    hint.textContent = "固定开销与计划存款在月初优先扣掉，剩下的 " + money(snap.discretionaryCents)
+      + " 才是可花的日常额度 —— 所以房租不会被日常消费花掉。";
+  }
 }
 
 function renderAll() {
@@ -1364,7 +1446,7 @@ function renderAll() {
   renderAiCard(snapshot);
   renderDiag(snapshot);
   renderFixedList();
-  renderPlanInputs();
+  renderBudgetCard(snapshot);
   $("parseMode").textContent = aiSettings.apiKey
     ? ("AI 解析 · " + (aiSettings.provider === "openai" ? "OpenAI" : "DeepSeek"))
     : "本地解析";
@@ -1392,24 +1474,88 @@ function makeTransaction(parsed) {
     createdAt: new Date().toISOString(),
   };
 }
-function commitTransaction(parsed) {
-  const tx = makeTransaction(parsed);
-  currentMonth().transactions.push(tx);
+/** 一次提交多笔：分别落库、统一刷新、一次可撤销 */
+function commitTransactions(list) {
+  const m = currentMonth();
+  const txs = list.map((parsed) => makeTransaction(parsed));
+  for (const tx of txs) m.transactions.push(tx);
   renderAll();
+
   const left = snapshot.todayRemainingCents;
   const tail = left >= 0
     ? "今天还剩 " + Core.fmtCents(left)
     : "今天已超出 " + Core.fmtCents(Math.abs(left));
-  showToast("记好了 —— " + Core.fmtCents(tx.amountCents) + "，" + tail, "撤销", () => undoTransaction(tx.id));
+  const head = txs.length > 1
+    ? "记好了 " + txs.length + " 笔 —— 合计 " + Core.fmtCents(Core.sumCents(txs.map((t) => t.amountCents)))
+    : "记好了 —— " + Core.fmtCents(txs[0].amountCents);
+  showToast(head + "，" + tail, "撤销", () => undoTransactions(txs.map((t) => t.id)));
 }
-function undoTransaction(id) {
+function undoTransactions(ids) {
+  const wanted = new Set(Array.isArray(ids) ? ids : [ids]);
   const m = currentMonth();
-  const idx = m.transactions.findIndex((t) => t.id === id);
-  if (idx >= 0) {
-    m.transactions.splice(idx, 1);
-    renderAll();
-    showToast("已撤销");
+  const keep = m.transactions.filter((t) => !wanted.has(t.id));
+  const removed = m.transactions.length - keep.length;
+  if (!removed) return;
+  m.transactions = keep;
+  renderAll();
+  showToast(removed > 1 ? "已撤销 " + removed + " 笔" : "已撤销");
+}
+
+/** 输入框实时预告：识别出多笔时列出「将记成 N 笔」 */
+function renderParsePreview() {
+  const el = $("parsePreview");
+  const raw = $("entryInput").value.trim();
+  const entries = raw ? Core.parseQuickEntries(raw) : [];
+  if (entries.length < 2) {
+    el.hidden = true;
+    el.textContent = "";
+    return;
   }
+  el.hidden = false;
+  el.textContent = "将记成 " + entries.length + " 笔："
+    + entries.map((e) => (e.note || "未备注") + " " + Core.fmtCents(e.amountCents)).join(" · ");
+}
+
+/** 先拆多笔再逐段解析；某段 AI 失败只回退该段到本地解析 */
+async function parseEntryList(raw) {
+  const chunks = Core.splitQuickEntries(raw);
+  if (!chunks.length) return { list: [], aiError: null };
+
+  const useAi = !!(aiSettings.apiKey && aiSettings.apiKey.trim());
+  if (!useAi) {
+    const list = [];
+    for (const chunk of chunks) {
+      const parsed = Core.parseQuickEntry(chunk);
+      if (parsed) list.push(parsed);
+    }
+    return { list: list, aiError: null };
+  }
+
+  const today = snapshot ? snapshot.today : Core.todayISO();
+  const list = [];
+  let aiError = null;
+  uiState.busy = true;
+  $("addBtn").disabled = true;
+  $("addBtn").textContent = "解析中";
+  try {
+    for (const chunk of chunks) {
+      let parsed = null;
+      try {
+        parsed = await parseWithAI(chunk, today);      // AI 只解析单笔，所以逐段调用
+        if (!parsed) throw new Error("没解析出金额");
+      } catch (err) {
+        aiError = aiError || ((err && err.message) || "未知错误");
+        parsed = null;
+      }
+      if (!parsed) parsed = Core.parseQuickEntry(chunk);
+      if (parsed) list.push(parsed);
+    }
+  } finally {
+    uiState.busy = false;
+    $("addBtn").disabled = false;
+    $("addBtn").textContent = "记下";
+  }
+  return { list: list, aiError: aiError };
 }
 
 async function handleAddSubmit(event) {
@@ -1418,39 +1564,24 @@ async function handleAddSubmit(event) {
   const raw = $("entryInput").value.trim();
   if (!raw) return;
 
-  let parsed = null;
-  const useAi = !!(aiSettings.apiKey && aiSettings.apiKey.trim());
-
-  if (useAi) {
-    uiState.busy = true;
-    $("addBtn").disabled = true;
-    $("addBtn").textContent = "解析中";
-    try {
-      parsed = await parseWithAI(raw, snapshot ? snapshot.today : Core.todayISO());
-      if (!parsed) throw new Error("没解析出金额");
-    } catch (err) {
-      // 网络/Key/额度问题都不该阻塞记账 —— 静默回退到本地解析
-      showToast("AI 解析失败（" + ((err && err.message) || "未知错误") + "），已用本地解析");
-      parsed = null;
-    } finally {
-      uiState.busy = false;
-      $("addBtn").disabled = false;
-      $("addBtn").textContent = "记下";
-    }
-  }
-  if (!parsed) parsed = Core.parseQuickEntry(raw);
-  if (!parsed) { showToast("没看懂金额，试试「打车 35」"); return; }
+  const result = await parseEntryList(raw);
+  // 网络/Key/额度问题都不该阻塞记账 —— 只需提示，已逐段回退到本地解析
+  if (result.aiError) showToast("AI 解析失败（" + result.aiError + "），已用本地解析");
+  if (!result.list.length) { showToast("没看懂金额，试试「打车 35」"); return; }
 
   // 用户的显式选择 > 解析结果（没手动点过则采用解析的预填）
-  if (uiState.refund) parsed.isRefund = true;
-  if (uiState.necessityTouched) parsed.necessity = uiState.necessity;
-  else uiState.necessity = parsed.necessity;
+  for (const parsed of result.list) {
+    if (uiState.refund) parsed.isRefund = true;
+    if (uiState.necessityTouched) parsed.necessity = uiState.necessity;
+  }
+  if (!uiState.necessityTouched) uiState.necessity = result.list[0].necessity;
 
   $("entryInput").value = "";
   uiState.refund = false;
   uiState.necessityTouched = false;
   syncNecessitySeg();
-  commitTransaction(parsed);
+  renderParsePreview();
+  commitTransactions(result.list);
 }
 
 function syncNecessitySeg() {
@@ -1467,6 +1598,7 @@ function bindEvents() {
 
   /* 记账 */
   $("addForm").addEventListener("submit", handleAddSubmit);
+  $("entryInput").addEventListener("input", renderParsePreview);
   $("necessitySeg").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-necessity]");
     if (!btn) return;
@@ -1477,10 +1609,10 @@ function bindEvents() {
   $("refundTag").addEventListener("click", () => { uiState.refund = !uiState.refund; syncNecessitySeg(); });
   $("todayList").addEventListener("click", (e) => {
     const del = e.target.closest("[data-del]");
-    if (del) undoTransaction(del.dataset.del);
+    if (del) undoTransactions([del.dataset.del]);
   });
 
-  /* 计划：收入 / 存款目标 */
+  /* 月度预算与存款设置：月收入 / 计划存款 */
   $("incomeInput").addEventListener("change", (e) => {
     const cents = Core.yuanToCents(e.target.value);
     currentMonth().incomeCents = (cents == null || cents < 0) ? 0 : cents;
