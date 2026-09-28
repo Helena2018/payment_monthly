@@ -1,0 +1,193 @@
+{
+  "$comment": "AI 财务助理 Agent 的评估用例。每个用例包含：engine（如何从账本构造引擎输入）、agent_input（LLM 实际看到的结构化数据）、expected（引擎权威计算值，也是系统提示词 few-shot 里引用的数字）、prompt_must_contain（必须在系统提示词中出现的展示串，用于防止 Prompt 与引擎数字漂移）。由 tests/test_agent_prompt.py 校验。",
+  "cases": [
+    {
+      "name": "01_healthy_mid_month",
+      "note": "正常预算内：节奏比时间慢，给正向反馈",
+      "engine": {
+        "month": "2026-09",
+        "today": "2026-09-10",
+        "income_cents": 500000,
+        "fixed": [
+          { "id": "f1", "name": "房租", "estimated_cents": 200000, "due_day": 1, "status": "paid" }
+        ],
+        "savings": [{ "id": "g1", "target_cents": 100000 }],
+        "transactions": [
+          { "id": "t1", "amount_cents": 45000, "local_date": "2026-09-05", "necessity": "optional" }
+        ]
+      },
+      "agent_input": {
+        "currency": "USD",
+        "unit": "cents",
+        "month_income": 500000,
+        "fixed_costs": 200000,
+        "target_savings": 100000,
+        "spent_so_far": 45000,
+        "days_left": 21,
+        "month_days_total": 30,
+        "locale": "en-US",
+        "user_message": null,
+        "derived": {
+          "state": "healthy",
+          "discretionary_cents": 200000,
+          "remaining_cents": 155000,
+          "baseline_daily_cents": 6666,
+          "floor_daily_cents": 3999,
+          "live_daily_cents": 7380,
+          "safe_to_spend_cents": 7380,
+          "today_spent_cents": 0,
+          "today_remaining_cents": 7380,
+          "month_end_adjustment_cents": 0,
+          "pace_ratio_pct": 23,
+          "time_ratio_pct": 33,
+          "projected_month_end_remaining_cents": 60500,
+          "projected_next_month_carryover_cents": 60500,
+          "alerts": [{ "code": "T7_POSITIVE", "severity": "info", "messageKey": "alert.on_track", "facts": {} }]
+        },
+        "policy": { "floor_ratio": 0.6, "savings_ratio_healthy": 0.2, "pace_tolerance_pp": 8 }
+      },
+      "expected": {
+        "discretionary_cents": 200000,
+        "remaining_cents": 155000,
+        "baseline_cents": 6666,
+        "floor_cents": 3999,
+        "live_baseline_cents": 7380,
+        "safe_to_spend_cents": 7380,
+        "month_end_adjustment_cents": 0,
+        "projected_month_end_remaining_cents": 60500,
+        "state": "healthy"
+      },
+      "prompt_must_contain": ["今天还能花 $73.80", "还能剩下 $605"]
+    },
+    {
+      "name": "02_severe_overspend_savings_at_risk",
+      "note": "严重超支：进入保底模式，存款目标受威胁（下月/存款需补 $240）",
+      "engine": {
+        "month": "2026-09",
+        "today": "2026-09-20",
+        "income_cents": 500000,
+        "fixed": [
+          { "id": "f1", "name": "房租", "estimated_cents": 250000, "due_day": 1, "status": "paid" }
+        ],
+        "savings": [{ "id": "g1", "target_cents": 150000 }],
+        "transactions": [
+          { "id": "t1", "amount_cents": 80000, "local_date": "2026-09-08", "necessity": "optional" }
+        ]
+      },
+      "agent_input": {
+        "currency": "USD",
+        "unit": "cents",
+        "month_income": 500000,
+        "fixed_costs": 250000,
+        "target_savings": 150000,
+        "spent_so_far": 80000,
+        "days_left": 11,
+        "month_days_total": 30,
+        "locale": "en-US",
+        "user_message": null,
+        "derived": {
+          "state": "smoothed",
+          "discretionary_cents": 100000,
+          "remaining_cents": 20000,
+          "baseline_daily_cents": 3333,
+          "floor_daily_cents": 1999,
+          "live_daily_cents": 1818,
+          "safe_to_spend_cents": 1999,
+          "today_spent_cents": 0,
+          "today_remaining_cents": 1999,
+          "month_end_adjustment_cents": -1989,
+          "pace_ratio_pct": 80,
+          "time_ratio_pct": 67,
+          "projected_month_end_remaining_cents": -24000,
+          "projected_next_month_carryover_cents": -1989,
+          "alerts": [
+            {
+              "code": "T5_MONTH_END_GAP",
+              "severity": "watch",
+              "messageKey": "alert.month_end_gap",
+              "facts": { "gapCents": 24000, "daysLeft": 11, "perDayCutCents": 2182 }
+            }
+          ]
+        },
+        "policy": { "floor_ratio": 0.6, "savings_ratio_healthy": 0.2, "pace_tolerance_pp": 8 }
+      },
+      "expected": {
+        "discretionary_cents": 100000,
+        "remaining_cents": 20000,
+        "baseline_cents": 3333,
+        "floor_cents": 1999,
+        "live_baseline_cents": 1818,
+        "safe_to_spend_cents": 1999,
+        "month_end_adjustment_cents": -1989,
+        "projected_month_end_remaining_cents": -24000,
+        "projected_savings_cents": 126000,
+        "state": "smoothed"
+      },
+      "prompt_must_contain": ["今天还能花 $19.99", "会超 $240", "只能存到 $1,260"]
+    },
+    {
+      "name": "03_natural_language_question",
+      "note": "自然语言问答：「我这个月存了 $500，接下来的 10 天我每天还能花多少钱？」",
+      "engine": {
+        "month": "2026-10",
+        "today": "2026-10-22",
+        "income_cents": 300000,
+        "fixed": [
+          {
+            "id": "f1",
+            "name": "房租+水电网",
+            "estimated_cents": 120000,
+            "due_day": 1,
+            "status": "paid"
+          }
+        ],
+        "savings": [{ "id": "g1", "target_cents": 50000 }],
+        "transactions": [
+          { "id": "t1", "amount_cents": 60000, "local_date": "2026-10-15", "necessity": "optional" }
+        ]
+      },
+      "agent_input": {
+        "currency": "USD",
+        "unit": "cents",
+        "month_income": 300000,
+        "fixed_costs": 120000,
+        "target_savings": 50000,
+        "spent_so_far": 60000,
+        "days_left": 10,
+        "month_days_total": 31,
+        "locale": "en-US",
+        "user_message": "我这个月存了 $500，接下来的 10 天我每天还能花多少钱？",
+        "derived": {
+          "state": "healthy",
+          "discretionary_cents": 130000,
+          "remaining_cents": 70000,
+          "baseline_daily_cents": 4193,
+          "floor_daily_cents": 2515,
+          "live_daily_cents": 7000,
+          "safe_to_spend_cents": 7000,
+          "today_spent_cents": 0,
+          "today_remaining_cents": 7000,
+          "month_end_adjustment_cents": 0,
+          "pace_ratio_pct": 46,
+          "time_ratio_pct": 71,
+          "projected_month_end_remaining_cents": 42730,
+          "projected_next_month_carryover_cents": 42730,
+          "alerts": []
+        },
+        "policy": { "floor_ratio": 0.6, "savings_ratio_healthy": 0.2, "pace_tolerance_pp": 8 }
+      },
+      "expected": {
+        "discretionary_cents": 130000,
+        "remaining_cents": 70000,
+        "baseline_cents": 4193,
+        "floor_cents": 2515,
+        "live_baseline_cents": 7000,
+        "safe_to_spend_cents": 7000,
+        "month_end_adjustment_cents": 0,
+        "projected_month_end_remaining_cents": 42730,
+        "state": "healthy"
+      },
+      "prompt_must_contain": ["每天可以花 $70（共 $700）", "$427.30"]
+    }
+  ]
+}

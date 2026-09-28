@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F5F6F8">
+<meta name="description" content="极简月度预算：只看三个数——本月还能花、今天还能花、固定开销与存款。数据只存在你的浏览器里。">
+<title>月月 · 极简月度预算</title>
+<style>
+/* ============================================================
+   设计令牌（与 docs/architecture.md 的视觉规范一致）
+   - 首屏只有一个大数字；语义色只在必要时出现
+   - 不用阴影堆叠：白卡 + 1px 描边 + 极轻阴影
+   ============================================================ */
+:root{
+  --bg:#F5F6F8; --card:#FFFFFF; --ink:#0B0B0F; --muted:#8A8F98;
+  --line:#ECEEF1; --line-strong:#DFE3E8;
+  --safe:#0E9F6E; --watch:#F59E0B; --danger:#E5484D; --accent:#1F6FEB;
+  --radius:16px; --radius-sm:12px;
+  --shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  /* 安全区（刘海屏） */
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font);
+  font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+/* 金额一律等宽数字，避免刷新时数字跳动 */
+.num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum"}
+button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
+input,select{font-family:inherit;font-size:15px;color:var(--ink)}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.wrap{max-width:480px;margin:0 auto;padding:calc(12px + var(--safe-top)) 16px calc(40px + var(--safe-bottom))}
+
+/* ---------- 顶栏 ---------- */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:4px 0 14px}
+.monthnav{display:flex;align-items:center;gap:2px}
+.monthnav button{width:32px;height:32px;border-radius:10px;color:var(--muted);font-size:17px;line-height:1;transition:background .15s}
+.monthnav button:active{background:#EBEDF0}
+.monthnav .label{min-width:104px;text-align:center;font-weight:650;font-size:15px;letter-spacing:.2px}
+.iconbtn{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;color:var(--muted);transition:background .15s}
+.iconbtn:active{background:#EBEDF0}
+
+/* ---------- 卡片 ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:12px}
+.card.tight{padding:14px}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-title{font-size:13px;font-weight:650;color:var(--muted);letter-spacing:.3px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.muted{color:var(--muted)}
+.tiny{font-size:12px}
+.small{font-size:13px}
+
+/* ---------- Hero：今天还能花（首屏唯一大数字） ---------- */
+.hero{padding:22px 18px 18px;text-align:center;position:relative;overflow:hidden}
+.hero .kicker{font-size:13px;font-weight:650;color:var(--muted);letter-spacing:.4px;margin-bottom:6px}
+.hero .amount{font-size:52px;font-weight:750;letter-spacing:-1.5px;line-height:1.05;margin:2px 0 4px}
+.hero .amount .cur{font-size:26px;font-weight:650;margin-right:2px;vertical-align:6px;letter-spacing:0}
+@media (max-width:360px){.hero .amount{font-size:44px}}
+.hero .sub{font-size:13px;color:var(--muted);font-weight:500}
+.hero.is-watch .amount{color:var(--watch)}
+.hero.is-danger .amount{color:var(--danger)}
+.hero.is-safe .amount{color:var(--ink)}
+.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:650;background:#F1F3F5;color:#5B616E}
+.chip.safe{background:rgba(14,159,110,.1);color:#0B7A55}
+.chip.watch{background:rgba(245,158,11,.13);color:#A1620A}
+.chip.danger{background:rgba(229,72,77,.11);color:#C0353A}
+.chip.info{background:rgba(31,111,235,.1);color:#1A5CC7}
+
+/* ---------- 进度条 + 时间基准线 ---------- */
+.bar{position:relative;height:8px;border-radius:999px;background:#EDEFF2;overflow:visible;margin:14px 0 10px}
+.bar .fill{position:absolute;inset:0 auto 0 0;border-radius:999px;background:#0B0B0F;transition:width .45s cubic-bezier(.4,0,.2,1);max-width:100%}
+.bar .fill.watch{background:var(--watch)}
+.bar .fill.danger{background:var(--danger)}
+.bar .pace{position:absolute;top:-3px;bottom:-3px;width:2px;border-radius:2px;background:#9AA1AC;opacity:.9}
+.bar .pace::after{content:"今天";position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--muted);white-space:nowrap;font-weight:600}
+.bar.no-pace .pace{display:none}
+
+/* ---------- 三池小格 ---------- */
+.pools{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line-strong)}
+.pool{text-align:center}
+.pool .pk{font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:600}
+.pool .pv{font-size:14px;font-weight:700}
+
+/* ---------- 记账输入 ---------- */
+.quickadd{display:flex;gap:8px;align-items:stretch}
+.quickadd input[type=text]{flex:1;min-width:0;height:48px;padding:0 14px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:#FBFBFC}
+.quickadd input[type=text]::placeholder{color:#A8AEB8}
+.btn{height:48px;padding:0 18px;border-radius:var(--radius-sm);background:var(--ink);color:#fff;font-weight:650;font-size:15px;transition:transform .12s,opacity .15s;white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.accent{background:var(--accent)}
+.btn.ghost{background:#F1F3F5;color:var(--ink)}
+.btn.danger{background:rgba(229,72,77,.1);color:#C0353A}
+.btn.sm{height:36px;padding:0 12px;font-size:13px;border-radius:10px}
+.btn.block{width:100%;display:block}
+.seg{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.seg .tag{height:30px;padding:0 12px;border-radius:999px;background:#F1F3F5;color:#5B616E;font-size:13px;font-weight:600;transition:background .15s,color .15s}
+.seg .tag.on{background:var(--ink);color:#fff}
+.seg .spacer{flex:1}
+.hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6}
+
+/* ---------- 明细列表 ---------- */
+.list{display:flex;flex-direction:column}
+.item{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.item .dot{width:6px;height:6px;border-radius:50%;background:#C9CED6;flex:none}
+.item .dot.necessary{background:var(--safe)}
+.item .body{flex:1;min-width:0}
+.item .name{font-size:14px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .meta{font-size:11px;color:var(--muted);margin-top:2px}
+.item .amt{font-size:15px;font-weight:700;white-space:nowrap}
+.item .amt.refund{color:var(--safe)}
+.item .del{width:28px;height:28px;border-radius:8px;color:#B6BCC5;font-size:16px;display:grid;place-items:center;flex:none}
+.item .del:active{background:#F5F6F8;color:var(--danger)}
+.empty{padding:22px 0;text-align:center;color:var(--muted);font-size:13px}
+
+/* ---------- AI 提醒卡 ---------- */
+.ai{border-left:3px solid var(--accent)}
+.ai.watch{border-left-color:var(--watch)}
+.ai.danger{border-left-color:var(--danger)}
+.ai .ai-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ai .avatar{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,#1F6FEB,#6EA8FF);display:grid;place-items:center;color:#fff;font-size:11px;font-weight:700}
+.ai .txt{font-size:14px;line-height:1.65}
+.ai .txt strong{font-weight:750}
+.ai .ops{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+
+/* ---------- 设置行 ---------- */
+.field{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.field:last-child{border-bottom:0}
+.field label{flex:none;width:76px;font-size:13px;color:var(--muted);font-weight:600}
+.field input,.field select{flex:1;min-width:0;height:40px;padding:0 12px;border:1px solid var(--line-strong);border-radius:10px;background:#FBFBFC}
+.field .suffix{flex:none;font-size:13px;color:var(--muted);font-weight:600}
+.subrow{font-size:11px;color:var(--muted);margin:-4px 0 8px}
+
+/* ---------- 结构诊断 ---------- */
+.diag{display:flex;flex-direction:column;gap:12px}
+.diag .d-top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
+.diag .d-top .k{color:var(--muted);font-weight:600}
+.diag .d-top .v{font-weight:700}
+.mini{height:6px;border-radius:999px;background:#EDEFF2;overflow:hidden}
+.mini i{display:block;height:100%;border-radius:999px;background:#0B0B0F;transition:width .4s}
+.mini i.safe{background:var(--safe)}.mini i.watch{background:var(--watch)}.mini i.danger{background:var(--danger)}
+
+/* ---------- 底部弹层 ---------- */
+.sheet-mask{position:fixed;inset:0;background:rgba(11,11,15,.4);opacity:0;pointer-events:none;transition:opacity .22s;z-index:40}
+.sheet-mask.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--card);border-radius:20px 20px 0 0;padding:8px 16px calc(20px + var(--safe-bottom));transform:translateY(102%);transition:transform .28s cubic-bezier(.32,.72,0,1);max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.sheet.open{transform:translateY(0)}
+@media (min-width:560px){.sheet{max-width:480px;margin:0 auto;border-radius:20px;bottom:20px}}
+.sheet .grip{width:38px;height:4px;border-radius:99px;background:#E3E6EA;margin:6px auto 14px}
+.sheet h3{margin:0 0 6px;font-size:17px;font-weight:700}
+.sheet .sheet-sub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6}
+.switch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0}
+.toggle{width:46px;height:28px;border-radius:99px;background:#E3E6EA;position:relative;transition:background .18s;flex:none}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18);transition:transform .18s}
+.toggle.on{background:var(--safe)}
+.toggle.on::after{transform:translateX(18px)}
+
+/* ---------- Toast ---------- */
+.toast{position:fixed;left:50%;bottom:calc(24px + var(--safe-bottom));transform:translate(-50%,20px);background:rgba(11,11,15,.94);color:#fff;font-size:13.5px;font-weight:550;padding:11px 16px;border-radius:12px;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:90vw;display:flex;align-items:center;gap:14px}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast button{color:#7EB0FF;font-weight:700;font-size:13.5px;flex:none}
+.footnote{text-align:center;font-size:11px;color:#A8AEB8;margin-top:18px;line-height:1.7}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="monthnav">
+      <button id="prevMonth" aria-label="上个月">‹</button>
+      <span class="label num" id="monthLabel">—</span>
+      <button id="nextMonth" aria-label="下个月">›</button>
+    </div>
+    <button class="iconbtn" id="openSettings" aria-label="设置">⚙</button>
+  </header>
+
+  <!-- ① 首屏唯一大数字：今天还能花 -->
+  <section class="card hero" id="hero" aria-live="polite">
+    <div class="kicker" id="heroKicker">今天还能花</div>
+    <div class="amount num" id="todayAmount">¥0</div>
+    <div class="sub num" id="todaySub">今日已花 ¥0 · 今日额度 ¥0</div>
+    <div style="margin-top:12px"><span class="chip" id="stateChip">—</span></div>
+  </section>
+
+  <!-- ② 本月进度（含「今天应有的位置」基准线） -->
+  <section class="card">
+    <div class="card-head">
+      <span class="card-title">本月还能花</span>
+      <span class="small muted num" id="monthSpentPct">—</span>
+    </div>
+    <div class="row" style="align-items:flex-end">
+      <div class="num" style="font-size:30px;font-weight:750;letter-spacing:-.8px" id="monthRemain">¥0</div>
+      <div class="tiny muted num" id="monthPace">—</div>
+    </div>
+    <div class="bar" id="monthBar">
+      <div class="fill" id="monthFill" style="width:0%"></div>
+      <div class="pace" id="monthPaceMark" style="left:0%"></div>
+    </div>
+    <div class="pools">
+      <div class="pool"><div class="pk">收入</div><div class="pv num" id="poolIncome">¥0</div></div>
+      <div class="pool"><div class="pk">固定+存款</div><div class="pv num" id="poolCommitted">¥0</div></div>
+      <div class="pool"><div class="pk">日常已花</div><div class="pv num" id="poolSpent">¥0</div></div>
+    </div>
+  </section>
+
+  <!-- ③ 记一笔 -->
+  <section class="card">
+    <div class="card-head"><span class="card-title">记一笔</span><span class="tiny muted" id="parseMode">本地解析</span></div>
+    <form class="quickadd" id="addForm" autocomplete="off">
+      <input type="text" id="entryInput" placeholder="打车 35 / 买咖啡 15 块" enterkeyhint="done" aria-label="输入一笔开销，例如：打车 35">
+      <button class="btn" type="submit" id="addBtn">记下</button>
+    </form>
+    <div class="seg" id="necessitySeg">
+      <button class="tag" type="button" data-necessity="optional">非必要</button>
+      <button class="tag" type="button" data-necessity="necessary">必要</button>
+      <span class="spacer"></span>
+      <button class="tag" type="button" id="refundTag">记为退款</button>
+    </div>
+    <div class="hint" id="addHint">直接输入「打车 35」即可。填入 API Key 后，会优先交给 AI 解析金额与备注。</div>
+  </section>
+
+  <!-- ④ 今日明细 -->
+  <section class="card">
+    <div class="card-head">
+      <span class="card-title">今日明细</span>
+      <span class="tiny muted num" id="todayCount">0 笔</span>
+    </div>
+    <div class="list" id="todayList"></div>
+  </section>
+
+  <!-- ⑤ AI 提醒（数字来自引擎，文案是确定性模板） -->
+  <section class="card ai" id="aiCard">
+    <div class="ai-head"><span class="avatar">月</span><span class="tiny" style="font-weight:700;color:var(--muted)">月月 · 财务教练</span></div>
+    <div class="txt" id="aiText">—</div>
+    <div class="ops" id="aiOps"></div>
+  </section>
+
+  <!-- ⑥ 结构诊断 -->
+  <section class="card">
+    <div class="card-head">
+      <span class="card-title">结构诊断</span>
+      <span class="tiny muted">固定开销率 / 存款率 / 消耗节奏</span>
+    </div>
+    <div class="diag" id="diag"></div>
+  </section>
+
+  <!-- ⑦ 本月计划 -->
+  <section class="card">
+    <div class="card-head"><span class="card-title">本月计划</span><span class="tiny muted">月初锁定，可随时改</span></div>
+    <div class="field"><label for="incomeInput">月收入</label><input type="number" min="0" step="0.01" inputmode="decimal" id="incomeInput" placeholder="0"><span class="suffix">元</span></div>
+    <div class="field"><label for="savingsInput">存款目标</label><input type="number" min="0" step="0.01" inputmode="decimal" id="savingsInput" placeholder="0"><span class="suffix">元</span></div>
+    <div class="subrow">固定开销（房租/房贷、水电网、保险、订阅、贷款…）</div>
+    <div class="list" id="fixedList"></div>
+    <form class="field" id="fixedForm" autocomplete="off" style="border-bottom:0;padding-top:6px">
+      <input type="text" id="fixedName" placeholder="名称，如 房租" style="flex:1.4">
+      <input type="number" min="0" step="0.01" inputmode="decimal" id="fixedAmount" placeholder="金额">
+      <button class="btn sm" type="submit">添加</button>
+    </form>
+    <div class="hint">固定开销与存款在月初优先扣掉，剩下的才进入可花的日常额度 —— 所以房租不会被日常消费花掉。</div>
+  </section>
+
+  <div class="footnote">
+    数据只存在这台设备的浏览器里（localStorage），不上传任何服务器。<br>
+    金额采用整数分运算与 60% 保底机制，口径见 docs/architecture.md。
+  </div>
+</div>
+
+<!-- 设置弹层 -->
+<div class="sheet-mask" id="sheetMask"></div>
+<div class="sheet" id="settingsSheet" role="dialog" aria-modal="true" aria-label="设置">
+  <div class="grip"></div>
+  <h3>设置</h3>
+  <div class="sheet-sub">先看 AI 解析：填 Key 后，「买咖啡 15 块」这类句子会交给大模型解析成金额与备注。</div>
+
+  <div class="field">
+    <label for="providerSelect">服务商</label>
+    <select id="providerSelect">
+      <option value="deepseek">DeepSeek</option>
+      <option value="openai">OpenAI</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="apiKeyInput">API Key</label>
+    <input type="password" id="apiKeyInput" placeholder="sk-..." autocomplete="off" spellcheck="false">
+  </div>
+  <div class="field">
+    <label for="modelInput">模型</label>
+    <input type="text" id="modelInput" placeholder="留空用默认">
+  </div>
+  <div class="field">
+    <label for="endpointInput">接口地址</label>
+    <input type="text" id="endpointInput" placeholder="留空用官方地址" spellcheck="false">
+  </div>
+  <div class="hint" style="margin:-2px 0 6px">
+    ⚠️ 浏览器的跨域（CORS）限制：OpenAI 官方接口**不允许**网页直连；DeepSeek 视其策略而定。
+    若直连被拦，请把上面的接口地址填成你自建的转发端点（如 Cloudflare Worker），
+    或干脆不填 Key —— 本地解析同样能记「打车 35」。
+  </div>
+  <div class="switch">
+    <div>
+      <div style="font-size:14px;font-weight:600">在这台设备上记住 Key</div>
+      <div class="tiny muted" style="margin-top:2px">关闭则仅本次会话有效，刷新后需重填</div>
+    </div>
+    <div class="toggle on" id="rememberToggle" role="switch" tabindex="0" aria-checked="true"></div>
+  </div>
+  <div class="hint" style="margin-bottom:14px">
+    ⚠️ Key 会以明文存在本机 localStorage 中。公共电脑上请勿保存，或不填 Key 只用本地解析。
+  </div>
+
+  <div class="seg" style="margin-bottom:8px">
+    <button class="btn ghost sm" id="testAi">测试连接</button>
+    <button class="btn ghost sm" id="clearKey">清除 Key</button>
+  </div>
+
+  <h3 style="margin-top:18px">预算参数</h3>
+  <div class="field">
+    <label for="floorRatioInput">保底比例</label>
+    <input type="number" min="0" max="1" step="0.05" inputmode="decimal" id="floorRatioInput">
+  </div>
+  <div class="sheet-sub" style="margin-top:8px">大额超支后，日额度不会低于「日基线 × 保底比例」，避免额度崩盘让人直接放弃。</div>
+
+  <h3 style="margin-top:18px">数据</h3>
+  <div class="seg" style="margin-bottom:10px">
+    <button class="btn ghost sm" id="exportData">导出 JSON</button>
+    <button class="btn ghost sm" id="importBtn">导入 JSON</button>
+    <input type="file" id="importFile" accept="application/json" class="sr">
+    <button class="btn danger sm" id="resetData">清空全部</button>
+  </div>
+  <button class="btn block" id="closeSettings">完成</button>
+</div>
+
+<div class="toast" id="toast"><span id="toastText"></span><button id="toastAction" hidden></button></div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   ==CORE_START==  纯逻辑核心（不碰 DOM，可被 tools/validate_webapp_core.js 抽取并
+   跑 fixtures/golden_cases.json 的同一份黄金向量，保证网页版与 Python/TS 引擎逐位一致）
+   ========================================================================== */
+
+/* ---------- 金额：一律整数分（ADR-001） ---------- */
+const CENTS = 100;
+const DEFAULT_CONFIG = { floorRatio: 0.6, bigTicketRatio: 2.0, paceTolerance: 0.08,
+                         carryoverPolicy: "carry", resetKeyNever: true };
+
+function floorDiv(n, d) { return Math.floor(n / d); }
+function sumCents(list) { let t = 0; for (const v of list) t += v; return t; }
+/** 最大余数法：保证 Σ结果 === total，余数优先给靠前的份额 */
+function allocate(total, parts) {
+  if (!Number.isInteger(total)) throw new RangeError("total must be integer cents");
+  if (!Number.isInteger(parts) || parts <= 0) throw new RangeError("parts must be a positive integer");
+  const sign = total < 0 ? -1 : 1;
+  const abs = Math.abs(total);
+  const base = Math.floor(abs / parts);
+  let rem = abs - base * parts;
+  const out = new Array(parts).fill(base);
+  for (let i = 0; i < rem; i++) out[i] += 1;
+  return out.map((v) => v * sign);
+}
+/** 元字符串 → 分，绕开 parseFloat*100 的浮点误差 */
+function yuanToCents(text) {
+  const s = String(text == null ? "" : text).trim().replace(/[,\s]/g, "");
+  const m = /^(-?)(\d*)(?:\.(\d{0,2}))?$/.exec(s);
+  if (!m || (m[2] === "" && (m[3] || "") === "")) return null;
+  const sign = m[1] === "-" ? -1 : 1;
+  const yuan = m[2] === "" ? 0 : parseInt(m[2], 10);
+  const frac = (m[3] || "").padEnd(2, "0");
+  return sign * (yuan * CENTS + (frac === "" ? 0 : parseInt(frac, 10)));
+}
+/** 分 → 展示串。规则与 prompts/financial_agent.system.md §5 一致：整数省略小数 */
+function fmtCents(cents, symbol) {
+  const sym = symbol == null ? "¥" : symbol;
+  const neg = cents < 0;
+  const abs = Math.abs(cents);
+  const yuan = Math.floor(abs / CENTS);
+  const frac = abs - yuan * CENTS;
+  const grouped = yuan.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (neg ? "-" : "") + sym + (frac === 0 ? grouped : grouped + "." + String(frac).padStart(2, "0"));
+}
+
+/* ---------- 日历：以「本地自然日字符串」为键（ADR-002） ---------- */
+function pad2(n) { return String(n).padStart(2, "0"); }
+function monthOf(date) { return String(date).slice(0, 7); }
+function daysInMonthOf(month) {
+  const y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+function diffDays(a, b) { return Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000); }
+function addDays(date, n) { return new Date(Date.parse(date + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10); }
+function daysLeftInclusive(month, today) {
+  const left = daysInMonthOf(month) - Number(today.slice(8, 10)) + 1;
+  return left < 0 ? 0 : left;
+}
+/** 账单日 1-31 / 'month_end' → 具体日期；2 月 31 号夹到 2/28 或 2/29 */
+function resolveDueDay(month, dueDay) {
+  const total = daysInMonthOf(month);
+  const day = dueDay === "month_end" ? total : Math.min(Math.max(Number(dueDay) || total, 1), total);
+  return month + "-" + pad2(day);
+}
+function clampISO(value, lo, hi) { return value < lo ? lo : value > hi ? hi : value; }
+function todayISO() {
+  const d = new Date();
+  return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+}
+function shiftMonth(month, delta) {
+  const y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return d.getUTCFullYear() + "-" + pad2(d.getUTCMonth() + 1);
+}
+
+/* ---------- 固定开销 / 存款（ADR-005） ---------- */
+/** 预留与实付分离：跳过或停用 → 0（钱释放回可支配）；有实际金额 → 用实际（差额自动回冲） */
+function effectiveFixedCents(f) {
+  if (f.active === false || f.status === "skipped") return 0;
+  return f.actualCents != null ? f.actualCents : (f.estimatedCents || 0);
+}
+function sumHardExpenses(list) { return sumCents(list.map(effectiveFixedCents)); }
+function resolveSavingsCents(g, incomeCents) {
+  if (g.status === "skipped") return 0;
+  if (g.percent != null) return floorDiv(incomeCents * Number(g.percent), 100);
+  return g.targetCents || 0;
+}
+function sumSavingsCents(list, incomeCents) {
+  return sumCents(list.map((g) => resolveSavingsCents(g, incomeCents)));
+}
+function findFixedDueSoon(list, month, today, withinDays) {
+  const span = withinDays == null ? 3 : withinDays;
+  const out = [];
+  for (const f of list) {
+    if (f.active === false || f.status !== "reserved") continue;
+    const dueDate = resolveDueDay(month, f.dueDay);
+    const delta = diffDays(today, dueDate);
+    if (delta >= 0 && delta <= span) {
+      out.push({ id: f.id, name: f.name, amountCents: effectiveFixedCents(f), dueDate: dueDate });
+    }
+  }
+  return out.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
+}
+function bigTicketThresholdCents(baselineCents, cfg) {
+  const ratio = cfg.bigTicketRatio == null ? 2 : cfg.bigTicketRatio;
+  if (baselineCents <= 0) return Number.MAX_SAFE_INTEGER;
+  return Math.floor(baselineCents * ratio);
+}
+function isBigTicketTx(tx, threshold) {
+  if (tx.amountCents <= 0) return false;
+  return tx.isBigTicket === true || tx.amountCents >= threshold;
+}
+
+/* ---------- 大额按日摊销（ADR-006）：真值立刻扣，节奏口径按天摊 ---------- */
+function amortizedChargeCents(tx, month, today) {
+  if (monthOf(tx.localDate) !== month) return tx.amountCents;
+  const spreadDays = daysLeftInclusive(month, tx.localDate);
+  if (spreadDays <= 0) return tx.amountCents;
+  const elapsed = diffDays(tx.localDate, today);
+  if (elapsed < 0) return 0;
+  const taken = Math.min(spreadDays, elapsed + 1);
+  return sumCents(allocate(tx.amountCents, spreadDays).slice(0, taken));
+}
+function buildAmortizationPlan(transactions, month, today, threshold) {
+  const entries = [];
+  for (const tx of transactions) {
+    if (!isBigTicketTx(tx, threshold) || tx.amortize === false) continue;
+    if ((tx.status || "settled") !== "settled" || tx.deletedAt) continue;
+    if ((tx.scope || "flex") !== "flex") continue;
+    if (monthOf(tx.localDate) !== month || tx.localDate > today) continue;
+    const spreadDays = Math.max(daysLeftInclusive(month, tx.localDate), 1);
+    const shares = allocate(tx.amountCents, spreadDays);
+    const charged = amortizedChargeCents(tx, month, today);
+    entries.push({
+      transactionId: tx.id, amountCents: tx.amountCents, purchaseDate: tx.localDate,
+      spreadDays: spreadDays, dailyDragCents: shares[0],
+      chargedSoFarCents: charged, pendingAmortizationCents: tx.amountCents - charged,
+    });
+  }
+  return entries.sort((a, b) => (a.purchaseDate < b.purchaseDate ? -1 : 1));
+}
+
+/* ---------- 消费归集（时点语义 + 幂等去重） ---------- */
+function dedupeTransactions(list) {
+  const seen = new Set(), out = [];
+  for (const t of list) {
+    const key = t.idempotencyKey || t.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+function collectSpending(transactions, month, effectiveToday, threshold) {
+  const all = dedupeTransactions(transactions || []);
+  const s = { flexSpentCents: 0, necessaryCents: 0, optionalCents: 0, unclassifiedCents: 0,
+              refundCents: 0, offBudgetCents: 0, pendingCents: 0, futureScheduledCents: 0,
+              todaySpentCents: 0, paceSpentCents: 0, bigTicketCount: 0 };
+  for (const t of all) {
+    if (monthOf(t.localDate) !== month || t.deletedAt) continue;
+    // 与 Python 模型默认值对齐：省略 status 视为 settled、省略 scope 视为 flex
+    const status = t.status || "settled";
+    const scope = t.scope || "flex";
+    if (status === "pending") { s.pendingCents += t.amountCents; continue; }
+    if (status !== "settled") continue;                                     // voided 完全不计
+    if (t.localDate > effectiveToday) { s.futureScheduledCents += t.amountCents; continue; }
+    if (scope === "off_budget") { s.offBudgetCents += t.amountCents; continue; }
+    s.flexSpentCents += t.amountCents;
+    if (t.amountCents < 0) s.refundCents += -t.amountCents;
+    if (t.necessity === "necessary") s.necessaryCents += t.amountCents;
+    else if (t.necessity === "optional") s.optionalCents += t.amountCents;
+    else s.unclassifiedCents += t.amountCents;
+    if (t.localDate === effectiveToday) s.todaySpentCents += t.amountCents;
+    if (isBigTicketTx(t, threshold) && t.amortize !== false) {
+      s.bigTicketCount += 1;
+      s.paceSpentCents += amortizedChargeCents(t, month, effectiveToday);
+    } else {
+      s.paceSpentCents += t.amountCents;
+    }
+  }
+  return s;
+}
+
+/* ---------- 快照计算：唯一主入口（ADR-003 纯函数） ---------- */
+function computeSnapshot(input) {
+  const cfg = Object.assign({}, DEFAULT_CONFIG, input.config || {});
+  const month = input.month;
+  const totalDays = daysInMonthOf(month);
+  const firstDay = month + "-01";
+  const lastDay = resolveDueDay(month, "month_end");
+
+  // 「今天」夹在本月内：月初前→按月初；月末后（对账）→按月末。daysLeft 恒 ≥ 1。
+  const today = clampISO(input.today || todayISO(), firstDay, lastDay);
+  const elapsedDays = Math.min(Math.max(diffDays(firstDay, today) + 1, 1), totalDays);
+  const daysLeft = totalDays - elapsedDays + 1;
+
+  const fixedList = input.fixed || [];
+  const activeFixed = fixedList.filter((f) => f.active !== false);
+  const hardExpenseCents = sumHardExpenses(activeFixed);
+  const fixed = {
+    paidCents: sumCents(activeFixed.filter((f) => f.status === "paid").map(effectiveFixedCents)),
+    reservedCents: sumCents(activeFixed.filter((f) => f.status === "reserved").map(effectiveFixedCents)),
+    skippedCents: sumCents(fixedList.filter((f) => f.active === false || f.status === "skipped")
+      .map((f) => (f.actualCents != null ? f.actualCents : (f.estimatedCents || 0)))),
+    dueSoon: findFixedDueSoon(activeFixed, month, today),
+  };
+
+  const incomeCents = input.incomeCents || 0;
+  const carryoverCents = input.carryoverCents || 0;
+  const savingsCents = sumSavingsCents(input.savings || [], incomeCents);
+
+  const committedCents = hardExpenseCents + savingsCents;
+  const discretionaryCents = incomeCents + carryoverCents - committedCents;
+
+  const baselineCents = discretionaryCents > 0 ? floorDiv(discretionaryCents, totalDays) : 0;
+  const floorCents = Math.floor(baselineCents * cfg.floorRatio);
+  const thresholdCents = bigTicketThresholdCents(baselineCents, cfg);
+
+  const spending = collectSpending(input.transactions, month, today, thresholdCents);
+  const spentCents = spending.flexSpentCents;
+  const remainingCents = discretionaryCents - spentCents;
+
+  const liveBaselineCents = remainingCents > 0 ? floorDiv(remainingCents, daysLeft) : 0;
+  const paceRatio = discretionaryCents > 0 ? spending.paceSpentCents / discretionaryCents : 0;
+  const timeRatio = elapsedDays / totalDays;
+  const paceGap = paceRatio - timeRatio;
+
+  let safeToSpendCents = 0, monthEndAdjustmentCents = 0, state;
+  if (discretionaryCents <= 0 && spentCents <= 0) {
+    state = "onboarding";                       // 还没填收入 → 引导态，不报错
+  } else if (remainingCents <= 0) {
+    state = "overdrawn";                        // 已透支：日额度归零，缺口结转下月
+  } else if (floorCents <= 0 || liveBaselineCents >= floorCents) {
+    safeToSpendCents = liveBaselineCents;
+    state = paceGap > cfg.paceTolerance ? "watch" : "healthy";
+  } else {
+    // 保底模式：真值日均跌破保底线（通常因大额消费）→ 展示 floor 维持行动力，
+    // 缺口显式记为「月末调节项」，诚实但不打击。
+    safeToSpendCents = floorCents;
+    monthEndAdjustmentCents = remainingCents - floorCents * daysLeft;
+    state = "smoothed";
+  }
+
+  const avgDailySpendRateCents = floorDiv(Math.max(spentCents, 0), elapsedDays);
+  const projectedMonthEndRemainingCents = remainingCents - avgDailySpendRateCents * daysLeft;
+  const amortization = buildAmortizationPlan(input.transactions || [], month, today, thresholdCents);
+
+  return {
+    month: month, today: today, totalDays: totalDays, elapsedDays: elapsedDays, daysLeft: daysLeft,
+    incomeCents: incomeCents, carryoverCents: carryoverCents,
+    fixed: fixed, hardExpenseCents: hardExpenseCents, savingsCents: savingsCents,
+    committedCents: committedCents, discretionaryCents: discretionaryCents,
+    spentCents: spentCents, remainingCents: remainingCents,
+    baselineCents: baselineCents, floorCents: floorCents, liveBaselineCents: liveBaselineCents,
+    safeToSpendCents: safeToSpendCents,
+    todaySpentCents: spending.todaySpentCents,
+    todayRemainingCents: safeToSpendCents - spending.todaySpentCents,
+    monthEndAdjustmentCents: monthEndAdjustmentCents,
+    paceRatio: paceRatio, timeRatio: timeRatio, paceGap: paceGap,
+    paceSpentCents: spending.paceSpentCents,
+    projectedMonthEndRemainingCents: projectedMonthEndRemainingCents,
+    state: state, spending: spending, amortization: amortization,
+    amortizedCount: amortization.length,
+    amortizedSpreadDays: amortization.length ? amortization[0].spreadDays : 0,
+    amortizedDailyDragCents: amortization.length ? amortization[0].dailyDragCents : 0,
+  };
+}
+
+/** 未来 N 天的额度排期（保底模式下每天给 floor，代价是累计缺口） */
+function rescheduleDailyAllowances(snap, horizonDays) {
+  const horizon = Math.max(1, Math.min(horizonDays == null ? 7 : horizonDays, snap.daysLeft));
+  const available = Math.max(snap.remainingCents, 0);
+  if (snap.state === "onboarding" || snap.state === "overdrawn") {
+    return Array.from({ length: horizon }, (_, i) => ({
+      date: addDays(snap.today, i), allowanceCents: 0,
+      remainingAfterCents: snap.remainingCents, floorProtected: false,
+    }));
+  }
+  const floorProtected = snap.state === "smoothed" && snap.floorCents > 0;
+  const shares = floorProtected ? new Array(snap.daysLeft).fill(snap.floorCents)
+                                : allocate(available, snap.daysLeft);
+  const out = [];
+  let cumulative = 0;
+  for (let i = 0; i < horizon; i++) {
+    cumulative += shares[i];
+    out.push({ date: addDays(snap.today, i), allowanceCents: shares[i],
+               remainingAfterCents: available - cumulative, floorProtected: floorProtected });
+  }
+  return out;
+}
+
+/** 月末结转：保底模式用月末调节项；否则取「剩余」与「线性外推」中较坏者 */
+function projectedCarryoverCents(snap, carryoverPolicy) {
+  if (snap.state === "smoothed") return snap.monthEndAdjustmentCents;
+  const policy = carryoverPolicy || "carry";
+  const base = snap.remainingCents > 0 ? (policy === "carry" ? snap.remainingCents : 0)
+                                       : (policy === "reset" ? 0 : snap.remainingCents);
+  return Math.min(base, snap.projectedMonthEndRemainingCents);
+}
+
+/* ---------- 告警（数字全部来自引擎；ADR-009） ---------- */
+function buildAlerts(snap, input) {
+  const cfg = Object.assign({}, DEFAULT_CONFIG, (input && input.config) || {});
+  const alerts = [];
+  if (snap.state === "onboarding") {
+    return [{ code: "ONBOARDING", severity: "info", messageKey: "onboarding", facts: {} }];
+  }
+  if (snap.discretionaryCents > 0 && snap.paceGap > cfg.paceTolerance) {
+    const expected = Math.floor(snap.discretionaryCents * snap.timeRatio);
+    alerts.push({ code: "T1_PACE_FAST", severity: "watch", messageKey: "pace_fast",
+      facts: { paceRatioPct: Math.round(snap.paceRatio * 100),
+               timeRatioPct: Math.round(snap.timeRatio * 100),
+               aheadCents: snap.paceSpentCents - expected, daysLeft: snap.daysLeft } });
+  }
+  if (snap.safeToSpendCents > 0 && snap.todaySpentCents > Math.floor(snap.safeToSpendCents * 1.2)) {
+    alerts.push({ code: "T2_TODAY_OVER", severity: "watch", messageKey: "today_over",
+      facts: { todaySpentCents: snap.todaySpentCents, safeToSpendCents: snap.safeToSpendCents,
+               overByCents: snap.todaySpentCents - snap.safeToSpendCents,
+               tomorrowCents: Math.max(snap.liveBaselineCents, 0) } });
+  }
+  for (const big of snap.amortization.filter((a) => a.purchaseDate === snap.today)) {
+    alerts.push({ code: "T3_BIG_TICKET", severity: "gentle", messageKey: "big_ticket",
+      facts: { amountCents: big.amountCents, dailyDragCents: big.dailyDragCents,
+               spreadDays: big.spreadDays, remainingCents: snap.remainingCents } });
+  }
+  const streak = consecutiveOverDays(input && input.transactions, snap.month, snap.today, snap.baselineCents);
+  if (streak >= 3) {
+    alerts.push({ code: "T4_CONSECUTIVE_OVER", severity: "watch", messageKey: "consecutive_over",
+      facts: { streak: streak, baselineCents: snap.baselineCents } });
+  }
+  if (snap.projectedMonthEndRemainingCents < 0 && snap.daysLeft > 1) {
+    const gap = -snap.projectedMonthEndRemainingCents;
+    alerts.push({ code: "T5_MONTH_END_GAP", severity: "watch", messageKey: "month_end_gap",
+      facts: { gapCents: gap, daysLeft: snap.daysLeft, perDayCutCents: Math.ceil(gap / snap.daysLeft) } });
+  }
+  if (snap.fixed.dueSoon.length > 0) {
+    const first = snap.fixed.dueSoon[0];
+    alerts.push({ code: "T6_FIXED_DUE", severity: "gentle", messageKey: "fixed_due",
+      facts: { count: snap.fixed.dueSoon.length, firstName: first.name, firstDueDate: first.dueDate,
+               totalCents: sumCents(snap.fixed.dueSoon.map((d) => d.amountCents)) } });
+  }
+  if (snap.state === "healthy" && snap.timeRatio >= 0.1 && snap.paceGap <= -0.08) {
+    alerts.push({ code: "T7_POSITIVE", severity: "info", messageKey: "on_track",
+      facts: { paceRatioPct: Math.round(snap.paceRatio * 100),
+               timeRatioPct: Math.round(snap.timeRatio * 100),
+               projectedSurplusCents: Math.max(snap.projectedMonthEndRemainingCents, 0) } });
+  } else if (snap.state === "healthy" && snap.projectedMonthEndRemainingCents > 0 && snap.daysLeft <= 3) {
+    alerts.push({ code: "T7_POSITIVE", severity: "info", messageKey: "month_end_surplus",
+      facts: { surplusCents: snap.projectedMonthEndRemainingCents, daysLeft: snap.daysLeft } });
+  }
+  return alerts;
+}
+
+/** 连续超过日基线的天数（用常量基线，避免动态额度自我收缩导致判定失真） */
+function consecutiveOverDays(transactions, month, today, baselineCents) {
+  if (!transactions || baselineCents <= 0) return 0;
+  const map = new Map();
+  for (const t of dedupeTransactions(transactions)) {
+    if (monthOf(t.localDate) !== month || t.deletedAt) continue;
+    if ((t.status || "settled") !== "settled") continue;
+    if ((t.scope || "flex") === "off_budget" || t.localDate > today) continue;
+    map.set(t.localDate, (map.get(t.localDate) || 0) + t.amountCents);
+  }
+  let streak = 0, cursor = today;
+  while (monthOf(cursor) === month) {
+    if ((map.get(cursor) || 0) > baselineCents) { streak += 1; cursor = addDays(cursor, -1); }
+    else break;
+  }
+  return streak;
+}
+
+const ALERT_PRIORITY = { T2_TODAY_OVER: 0, T1_PACE_FAST: 1, T5_MONTH_END_GAP: 2,
+                         T6_FIXED_DUE: 3, T4_CONSECUTIVE_OVER: 4, T3_BIG_TICKET: 5,
+                         ONBOARDING: 8, T7_POSITIVE: 9 };
+
+/**
+ * 温和文案（语气规则：先结果 → 一句话趋势/建议 → 只有严重态才给「下一步」）。
+ * 每天最多 1 条主提醒 + 1 条正向；不评判人格；大额消费不等于错误。
+ * 文案是确定性模板（数字全部取自引擎），不是 LLM 生成的 —— 保证不幻觉。
+ */
+function gentleMessage(snap, input) {
+  const alerts = buildAlerts(snap, input).slice()
+    .sort((a, b) => ALERT_PRIORITY[a.code] - ALERT_PRIORITY[b.code]);
+  const main = alerts.find((a) => a.severity !== "info");
+  const positive = alerts.find((a) => a.severity === "info");
+  const money = (c) => fmtCents(c);
+  const pct = (x) => Math.round(x * 100);
+
+  if (snap.state === "onboarding") {
+    return { tone: "info", code: "ONBOARDING",
+      headline: "先填一下本月收入，我就能算出今天能花多少。",
+      advice: "固定开销和存款目标各填一次，之后每个月自动沿用。",
+      ops: [{ action: "openPlan", label: "去填写" }] };
+  }
+
+  if (!main) {
+    if (positive && positive.code === "T7_POSITIVE") {
+      const f = positive.facts;
+      return { tone: "info", code: positive.code,
+        headline: "本月弹性只用了 " + (f.paceRatioPct != null ? f.paceRatioPct : pct(snap.paceRatio)) +
+                  "%，时间已过 " + (f.timeRatioPct != null ? f.timeRatioPct : pct(snap.timeRatio)) + "%。",
+        advice: "按这个节奏，月末大约还能剩下 " + money(Math.max(snap.projectedMonthEndRemainingCents, 0)) + "。",
+        ops: [{ action: "showPlan7", label: "看未来 7 天额度" }] };
+    }
+    return { tone: "info", code: "NEUTRAL",
+      headline: "今天还能花 " + money(Math.max(snap.todayRemainingCents, 0)) + "。",
+      advice: "节奏正常，按自己的计划来就行。", ops: [] };
+  }
+
+  const f = main.facts;
+  const projectedGap = Math.max(-snap.projectedMonthEndRemainingCents, 0);
+  switch (main.code) {
+    case "T2_TODAY_OVER":
+      return { tone: "watch", code: main.code,
+        headline: "今天多花了一点 —— 比每日建议多了 " + money(f.overByCents) + "。",
+        advice: "照这个节奏，月末大约会差 " + money(projectedGap) + "；明天调到 " +
+                money(f.tomorrowCents) + " 就回来了。",
+        ops: [{ action: "showPlan7", label: "看未来 7 天" }] };
+    case "T1_PACE_FAST":
+      return { tone: "watch", code: main.code,
+        headline: "本月弹性已用 " + f.paceRatioPct + "%，时间过了 " + f.timeRatioPct + "%。",
+        advice: "接下来 " + f.daysLeft + " 天每天大约 " + money(snap.safeToSpendCents) + " 就能回到计划上。",
+        ops: [{ action: "showPlan7", label: "看未来 7 天" }] };
+    case "T5_MONTH_END_GAP":
+      return { tone: snap.state === "smoothed" ? "danger" : "watch", code: main.code,
+        headline: "照这个速度，月末大约会差 " + money(f.gapCents) + "。",
+        advice: "接下来 " + f.daysLeft + " 天每天少花 " + money(f.perDayCutCents) + "，就是一顿外卖的量。",
+        ops: [{ action: "acceptSmoothed", label: "按每天 " + money(snap.safeToSpendCents) + " 过" },
+              { action: "showPlan7", label: "看未来 7 天" }] };
+    case "T6_FIXED_DUE":
+      return { tone: "gentle", code: main.code,
+        headline: f.firstName + " " + money(f.totalCents) + " 将于 " + f.firstDueDate + " 扣款，已提前锁定。",
+        advice: "这笔已不含在可花额度里，所以现在看到的余额是安全的。", ops: [] };
+    case "T4_CONSECUTIVE_OVER":
+      return { tone: "watch", code: main.code,
+        headline: "连续 " + f.streak + " 天超过日基线 " + money(f.baselineCents) + "。",
+        advice: "不用硬扛，把下周的娱乐预算调低一档，比每天克制更容易做到。",
+        ops: [{ action: "showPlan7", label: "看未来 7 天" }] };
+    case "T3_BIG_TICKET":
+      return { tone: "gentle", code: main.code,
+        headline: "刚记了一笔 " + money(f.amountCents) + "，占今天额度很大一部分。",
+        advice: "它按剩余 " + f.spreadDays + " 天摊开（每天 " + money(f.dailyDragCents) + "），所以不算「花太快」。",
+        ops: [{ action: "markOffBudget", label: "这笔是预算外" },
+              { action: "showPlan7", label: "看未来 7 天" }] };
+    default:
+      return { tone: "info", code: "NEUTRAL",
+        headline: "今天还能花 " + money(snap.safeToSpendCents) + "。",
+        advice: "有变化我会提醒你。", ops: [] };
+  }
+}
+
+/* ---------- 自然语言记账：本地解析（无网络也能用） ---------- */
+const NECESSARY_HINTS = /饭|餐|菜|米|面|早点|早餐|午饭|晚饭|外卖|超市|生鲜|菜场|药|医院|挂号|体检|地铁|公交|打车|机票|火车|加油|停车|过路|房租|房贷|水费|电费|燃气|物业|话费|宽带|学费|保险|快递|奶粉|尿布/;
+const NOISE_WORDS = /(刚刚|刚才|今天|昨天|早上|中午|晚上|花了|支付了|付了|买了|买点|买个|用了|元|块钱|块|毛|角|人民币|RMB|CNY)/g;
+
+function guessNecessity(text) { return NECESSARY_HINTS.test(text) ? "necessary" : "optional"; }
+
+/**
+ * 「打车 35」→ { amountCents: 3500, note: "打车", necessity: "necessary" }
+ * 设计原则：只提取「金额 + 备注 + 一个二元标记」，绝不要求分类树。
+ */
+function parseQuickEntry(raw) {
+  const text = String(raw == null ? "" : raw).trim();
+  if (!text) return null;
+  const m = /(-?\d+(?:\.\d{1,2})?)/.exec(text);
+  if (!m) return null;
+  const parsed = yuanToCents(m[1]);
+  if (parsed == null || parsed === 0) return null;
+  const isRefund = parsed < 0 || /退款|退货|报销|返现/.test(text);
+  const note = text.replace(m[1], " ").replace(/[¥￥]/g, " ").replace(NOISE_WORDS, " ")
+    .replace(/退款|退货|报销|返现/g, " ").replace(/\s+/g, " ").trim();
+  return {
+    amountCents: Math.abs(parsed),
+    note: note || "未备注",
+    necessity: guessNecessity(text),
+    isRefund: isRefund,
+    source: "local",
+  };
+}
+
+/* ---------- 供 tools/validate_webapp_core.js 及 UI 复用 ---------- */
+globalThis.Core = {
+  CENTS: CENTS, DEFAULT_CONFIG: DEFAULT_CONFIG,
+  floorDiv: floorDiv, allocate: allocate, yuanToCents: yuanToCents, fmtCents: fmtCents,
+  sumCents: sumCents, effectiveFixedCents: effectiveFixedCents, resolveSavingsCents: resolveSavingsCents,
+  daysInMonthOf: daysInMonthOf, daysLeftInclusive: daysLeftInclusive, resolveDueDay: resolveDueDay,
+  diffDays: diffDays, addDays: addDays, monthOf: monthOf, shiftMonth: shiftMonth, todayISO: todayISO,
+  collectSpending: collectSpending, amortizedChargeCents: amortizedChargeCents,
+  bigTicketThresholdCents: bigTicketThresholdCents, buildAmortizationPlan: buildAmortizationPlan,
+  computeSnapshot: computeSnapshot, rescheduleDailyAllowances: rescheduleDailyAllowances,
+  projectedCarryoverCents: projectedCarryoverCents,
+  buildAlerts: buildAlerts, gentleMessage: gentleMessage,
+  parseQuickEntry: parseQuickEntry, guessNecessity: guessNecessity,
+};
+/* ==CORE_END== */
+
+/* ==========================================================================
+   UI 层：localStorage 持久化 / 渲染 / 事件 / AI 解析
+   ========================================================================== */
+const LS_STORE = "yueyue.budget.v1";
+const LS_AI = "yueyue.ai.v1";
+
+const $ = (id) => document.getElementById(id);
+let store = null;
+let aiSettings = null;
+let viewMonth = null;      // 当前查看的月份 'YYYY-MM'
+let snapshot = null;
+let uiState = { necessity: "optional", necessityTouched: false, refund: false, busy: false };
+
+function newId() {
+  return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+}
+function emptyMonth() {
+  return { incomeCents: 0, carryoverCents: 0, fixed: [], savings: [], transactions: [] };
+}
+function loadStore() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LS_STORE) || "null");
+    if (parsed && parsed.version === 1 && parsed.months) return parsed;
+  } catch (err) { console.warn("读取本地数据失败，已重置", err); }
+  return { version: 1, config: { floorRatio: 0.6 }, months: {} };
+}
+function saveStore() {
+  try { localStorage.setItem(LS_STORE, JSON.stringify(store)); }
+  catch (err) { showToast("本地保存失败（可能是隐私模式）"); }
+}
+function loadAiSettings() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(LS_AI) || "{}") || {}; } catch (err) { saved = {}; }
+  let sessionKey = "";
+  try { sessionKey = sessionStorage.getItem(LS_AI) || ""; } catch (err) { sessionKey = ""; }
+  return {
+    provider: saved.provider || "deepseek",
+    model: saved.model || "",
+    endpoint: saved.endpoint || "",
+    apiKey: saved.apiKey || sessionKey || "",
+    remember: saved.remember !== false,
+  };
+}
+function saveAiSettings() {
+  try {
+    if (aiSettings.remember) {
+      localStorage.setItem(LS_AI, JSON.stringify({
+        provider: aiSettings.provider, model: aiSettings.model,
+        endpoint: aiSettings.endpoint, apiKey: aiSettings.apiKey, remember: true,
+      }));
+      sessionStorage.removeItem(LS_AI);
+    } else {
+      localStorage.setItem(LS_AI, JSON.stringify({
+        provider: aiSettings.provider, model: aiSettings.model,
+        endpoint: aiSettings.endpoint, remember: false,
+      }));
+      sessionStorage.setItem(LS_AI, aiSettings.apiKey || "");
+    }
+  } catch (err) { /* 隐私模式下忽略 */ }
+}
+
+/**
+ * 取得某月记录。首次访问某个月时做「月初分配」：
+ *  ① 沿用上个月的固定开销与存款目标（状态回到 reserved / planned）；
+ *  ② 把上月的月末预测写入本月 carryoverCents（结余滚入，透支扣减）。
+ * 这正是「固定账单与存款优先扣除」在跨月时的落地方式。
+ */
+function ensureMonth(month) {
+  if (store.months[month]) return store.months[month];
+  const prevMonth = Core.shiftMonth(month, -1);
+  const prev = store.months[prevMonth];
+  const fresh = emptyMonth();
+  if (prev) {
+    fresh.incomeCents = prev.incomeCents;
+    fresh.fixed = prev.fixed.map((f) => ({
+      id: newId(), name: f.name, kind: f.kind || "bill", dueDay: f.dueDay == null ? "month_end" : f.dueDay,
+      estimatedCents: f.estimatedCents, actualCents: null, status: "reserved",
+      autoDebit: !!f.autoDebit, active: f.active !== false,
+    }));
+    fresh.savings = prev.savings.map((g) => ({
+      id: newId(), name: g.name || "月度储蓄",
+      targetCents: g.targetCents || 0, percent: g.percent == null ? null : g.percent,
+      status: "planned",
+    }));
+    const prevSnap = Core.computeSnapshot({
+      month: prevMonth, today: new Date().toISOString().slice(0, 10),
+      incomeCents: prev.incomeCents, carryoverCents: prev.carryoverCents,
+      fixed: prev.fixed, savings: prev.savings, transactions: prev.transactions,
+      config: store.config,
+    });
+    fresh.carryoverCents = Core.projectedCarryoverCents(prevSnap, "carry");
+  }
+  store.months[month] = fresh;
+  return fresh;
+}
+function currentMonth() { return ensureMonth(viewMonth); }
+
+/* ---------- Toast（带可选的「撤销」） ---------- */
+let toastTimer = null;
+function showToast(text, actionLabel, onAction) {
+  const el = $("toast"), btn = $("toastAction");
+  $("toastText").textContent = text;
+  if (actionLabel && onAction) {
+    btn.hidden = false; btn.textContent = actionLabel;
+    btn.onclick = () => { hideToast(); onAction(); };
+  } else { btn.hidden = true; btn.onclick = null; }
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, actionLabel ? 5200 : 2400);
+}
+function hideToast() { $("toast").classList.remove("show"); }
+
+/* ---------- AI 解析（OpenAI / DeepSeek，OpenAI 兼容协议） ---------- */
+const AI_ENDPOINTS = {
+  openai: "https://api.openai.com/v1/chat/completions",
+  deepseek: "https://api.deepseek.com/chat/completions",
+};
+const AI_DEFAULT_MODEL = { openai: "gpt-4o-mini", deepseek: "deepseek-chat" };
+
+/**
+ * 解析器的系统提示词：只做「一句话 → 金额/备注/标记」的抽取。
+ * 刻意限制成单一职责 —— 预算数字由本地引擎算，绝不让模型碰。
+ */
+function buildParseSystemPrompt(today) {
+  return [
+    "你是一个记账解析器，只做一件事：把用户的一句话解析成 JSON。",
+    "今天是 " + today + "。",
+    "输出字段：",
+    '  "amount": 数字，单位「元」，支出为正、退款为负；解析不出填 null',
+    '  "note": 字符串，6 个汉字以内的简短备注，如「打车」「咖啡」；不确定填「未备注」',
+    '  "necessity": "necessary" 表示生存/通勤/医疗/账单类，"optional" 表示娱乐/零食/非必需',
+    '  "date": "YYYY-MM-DD"，仅当用户明确提到别的日期时才填，否则 null',
+    "规则：",
+    "1) 只输出 JSON 本体，不要 markdown 代码块、不要解释、不要多余文字。",
+    "2) 不要做任何预算计算，不要给建议，不要反问，不要输出除以上四个字段外的内容。",
+    "3) 金额里出现「万」按 10000 换算；「块/元/毛」等口语词按常识处理。",
+  ].join("\n");
+}
+
+function extractJson(text) {
+  if (!text) return null;
+  const cleaned = String(text).replace(/```json/gi, "").replace(/```/g, "").trim();
+  try { return JSON.parse(cleaned); } catch (err) { /* 继续尝试 */ }
+  const start = cleaned.indexOf("{"), end = cleaned.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch (err) { return null; }
+  }
+  return null;
+}
+
+async function callChatCompletion(messages, timeoutMs) {
+  const provider = aiSettings.provider === "openai" ? "openai" : "deepseek";
+  const model = aiSettings.model || AI_DEFAULT_MODEL[provider];
+  // 允许覆盖接口地址：用于自建转发（绕开 OpenAI 的浏览器 CORS 限制）
+  const endpoint = (aiSettings.endpoint || "").trim() || AI_ENDPOINTS[provider];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs || 20000);
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + aiSettings.apiKey },
+      body: JSON.stringify({
+        model: model,
+        temperature: 0,
+        max_tokens: 200,
+        response_format: { type: "json_object" },
+        messages: messages,
+      }),
+      signal: controller.signal,
+    });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) {
+      const detail = payload && payload.error && payload.error.message ? payload.error.message : ("HTTP " + res.status);
+      const hint = res.status === 401 || res.status === 403 ? "API Key 无效或没有权限"
+                 : res.status === 429 ? "调用频率/额度受限，稍后再试"
+                 : res.status >= 500 ? "服务商暂时不可用" : "请求被拒绝";
+      throw new Error(hint + "（" + detail + "）");
+    }
+    const content = payload && payload.choices && payload.choices[0]
+      && payload.choices[0].message && payload.choices[0].message.content;
+    return content || "";
+  } finally { clearTimeout(timer); }
+}
+
+/** 返回解析结果；失败时抛错，调用方回退到本地解析 */
+async function parseWithAI(text, today) {
+  const content = await callChatCompletion([
+    { role: "system", content: buildParseSystemPrompt(today) },
+    { role: "user", content: "用户说：「" + text + "」" },
+  ], 20000);
+  const data = extractJson(content);
+  if (!data || data.amount == null) return null;
+  const cents = Core.yuanToCents(String(data.amount));
+  if (cents == null || cents === 0) return null;
+  const necessity = data.necessity === "necessary" ? "necessary" : "optional";
+  return {
+    amountCents: Math.abs(cents),
+    note: (data.note && String(data.note).trim()) || "未备注",
+    necessity: necessity,
+    isRefund: cents < 0,
+    date: data.date || null,
+    source: "ai",
+  };
+}
+
+async function testAiConnection() {
+  const content = await callChatCompletion([
+    { role: "system", content: '只回复 JSON：{"ok":true}' },
+    { role: "user", content: "ping" },
+  ], 15000);
+  return content;
+}
+
+/* ==========================================================================
+   渲染
+   ========================================================================== */
+function buildInput() {
+  const m = currentMonth();
+  return {
+    month: viewMonth, today: Core.todayISO(),
+    incomeCents: m.incomeCents, carryoverCents: m.carryoverCents,
+    fixed: m.fixed, savings: m.savings, transactions: m.transactions,
+    config: store.config,
+  };
+}
+/** 只在输入框没有焦点时写值，避免打断用户输入 */
+function setInputValue(el, value) {
+  if (document.activeElement === el) return;
+  const text = value === "" || value == null ? "" : String(value);
+  if (el.value !== text) el.value = text;
+}
+function pctText(numerator, denominator) {
+  if (!denominator || denominator <= 0) return "—";
+  return Math.round((numerator / denominator) * 100) + "%";
+}
+function healthTone(value, healthyMax, watchMax) {
+  if (value == null) return "";
+  if (value <= healthyMax) return "safe";
+  if (value <= watchMax) return "watch";
+  return "danger";
+}
+
+function renderHero(snap) {
+  const hero = $("hero"), amountEl = $("todayAmount"), subEl = $("todaySub"), chip = $("stateChip");
+  hero.classList.remove("is-safe", "is-watch", "is-danger");
+  chip.className = "chip";
+  const money = Core.fmtCents;
+
+  if (snap.state === "onboarding") {
+    $("heroKicker").textContent = "今天还能花";
+    amountEl.textContent = "—";
+    subEl.textContent = "填好本月收入、固定开销与存款目标即可开始";
+    chip.classList.add("info"); chip.textContent = "未设置本月预算";
+    hero.classList.add("is-safe");
+    return;
+  }
+
+  const remainingToday = snap.todayRemainingCents;
+  if (snap.state === "overdrawn") {
+    hero.classList.add("is-danger");
+    $("heroKicker").textContent = "今天额度已用完";
+    amountEl.textContent = money(0);
+    subEl.textContent = "本月已超出 " + money(Math.abs(snap.remainingCents)) +
+      "　·　会从下月弹性里扣";
+    chip.classList.add("danger"); chip.textContent = "本月已透支";
+    return;
+  }
+
+  if (remainingToday < 0) {
+    hero.classList.add("is-danger");
+    $("heroKicker").textContent = "今天已超出";
+    amountEl.textContent = "-" + money(Math.abs(remainingToday));
+  } else {
+    hero.classList.add(snap.state === "healthy" ? "is-safe" : "is-watch");
+    $("heroKicker").textContent = snap.state === "smoothed" ? "今天保底能花" : "今天还能花";
+    amountEl.textContent = money(remainingToday);
+  }
+
+  let sub = "今日已花 " + money(Math.max(snap.todaySpentCents, 0)) + "　·　今日额度 " + money(snap.safeToSpendCents);
+  if (snap.state === "smoothed" && snap.monthEndAdjustmentCents < 0) {
+    sub += "　·　月末调节 " + money(snap.monthEndAdjustmentCents);
+  }
+  subEl.textContent = sub;
+
+  if (snap.state === "healthy") { chip.classList.add("safe"); chip.textContent = "节奏正常"; }
+  else if (snap.state === "watch") { chip.classList.add("watch"); chip.textContent = "节奏偏快"; }
+  else if (snap.state === "smoothed") {
+    chip.classList.add("watch");
+    chip.textContent = "保底模式 · 还剩 " + snap.daysLeft + " 天";
+  }
+}
+
+function renderMonthCard(snap) {
+  const money = Core.fmtCents;
+  const F = snap.discretionaryCents;
+  const spentPct = F > 0 ? Math.max(snap.spentCents / F, 0) : 0;
+  const fill = $("monthFill"), fillPct = Math.min(Math.max(spentPct * 100, 0), 100);
+
+  fill.style.width = fillPct + "%";
+  fill.className = "fill" + (snap.state === "overdrawn" ? " danger"
+    : snap.state === "watch" || snap.state === "smoothed" ? " watch" : "");
+  $("monthFill").style.width = fillPct + "%";
+  $("monthPaceMark").style.left = Math.round(snap.timeRatio * 100) + "%";
+  $("monthBar").classList.toggle("no-pace", F <= 0);
+
+  $("monthSpentPct").textContent = F > 0 ? "日常已用 " + Math.round(spentPct * 100) + "%" : "—";
+  $("monthRemain").textContent = snap.remainingCents < 0
+    ? "-" + money(Math.abs(snap.remainingCents)) : money(snap.remainingCents);
+  $("monthRemain").style.color = snap.remainingCents < 0 ? "var(--danger)" : "var(--ink)";
+
+  const paceBits = ["剩余 " + snap.daysLeft + " 天"];
+  if (snap.state !== "onboarding" && snap.state !== "overdrawn") {
+    paceBits.push("日均 " + money(snap.safeToSpendCents));
+  }
+  if (snap.state === "healthy" || snap.state === "watch") {
+    const diff = Math.round(snap.paceGap * 100);
+    paceBits.push(diff >= 0 ? "比时间快 " + diff + "pp" : "比时间慢 " + Math.abs(diff) + "pp");
+  }
+  $("monthPace").textContent = paceBits.join(" · ");
+
+  $("poolIncome").textContent = money(snap.incomeCents + snap.carryoverCents);
+  $("poolCommitted").textContent = money(snap.committedCents);
+  $("poolSpent").textContent = money(snap.spentCents);
+}
+
+function renderTodayList(snap) {
+  const host = $("todayList");
+  const seen = new Set();
+  const items = [];
+  for (const t of (currentMonth().transactions || [])) {
+    if (t.localDate !== snap.today || t.deletedAt || t.status === "voided") continue;
+    const key = t.idempotencyKey || t.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(t);
+  }
+  items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  $("todayCount").textContent = items.length + " 笔";
+
+  if (!items.length) {
+    host.innerHTML = '<div class="empty">今天还没有记账。<br>试试输入「打车 35」。</div>';
+    return;
+  }
+  host.innerHTML = "";
+  for (const t of items) {
+    const isRefund = t.amountCents < 0;
+    const row = document.createElement("div");
+    row.className = "item";
+    row.dataset.tx = t.id;
+
+    const dot = document.createElement("span");
+    dot.className = "dot" + (t.necessity === "necessary" ? " necessary" : "");
+
+    const body = document.createElement("div");
+    body.className = "body";
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = t.note || "未备注";               // textContent：天然防注入
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    const bits = [t.necessity === "necessary" ? "必要"
+                : t.necessity === "optional" ? "非必要" : "未标记"];
+    if (t.scope === "off_budget") bits.push("预算外");
+    if (t.source === "ai") bits.push("AI 解析");
+    if (t.status === "pending") bits.push("结算中");
+    if (t.tags && t.tags.length) bits.push(t.tags.join("·"));
+    meta.textContent = bits.join(" · ");
+    body.appendChild(name);
+    body.appendChild(meta);
+
+    const amt = document.createElement("span");
+    amt.className = "amt num" + (isRefund ? " refund" : "");
+    amt.textContent = (isRefund ? "+" : "−") + Core.fmtCents(Math.abs(t.amountCents));
+
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "×";
+    del.dataset.del = t.id;
+    del.setAttribute("aria-label", "删除 " + (t.note || "这笔"));
+
+    row.appendChild(dot); row.appendChild(body); row.appendChild(amt); row.appendChild(del);
+    host.appendChild(row);
+  }
+}
+
+function renderAiCard(snap) {
+  const msg = Core.gentleMessage(snap, buildInput());
+  const card = $("aiCard");
+  card.classList.remove("watch", "danger");
+  if (msg.tone === "watch") card.classList.add("watch");
+  if (msg.tone === "danger") card.classList.add("danger");
+
+  const txt = $("aiText");
+  txt.textContent = "";
+  const line1 = document.createElement("div");
+  line1.style.fontWeight = "650";
+  line1.textContent = msg.headline;
+  const line2 = document.createElement("div");
+  line2.className = "muted";
+  line2.style.marginTop = "4px";
+  line2.textContent = msg.advice;
+  txt.appendChild(line1);
+  txt.appendChild(line2);
+
+  const ops = $("aiOps");
+  ops.innerHTML = "";
+  for (const op of (msg.ops || [])) {
+    const btn = document.createElement("button");
+    btn.className = "btn ghost sm";
+    btn.textContent = op.label;
+    btn.dataset.action = op.action;
+    ops.appendChild(btn);
+  }
+}
+
+function renderDiag(snap) {
+  const host = $("diag");
+  const income = snap.incomeCents;
+  const fixedRatio = income > 0 ? snap.hardExpenseCents / income : null;
+  const savingsRatio = income > 0 ? snap.savingsCents / income : null;
+  const pacePp = Math.round(snap.paceGap * 100);
+
+  const rows = [
+    { k: "固定开销率",
+      v: fixedRatio == null ? "—" : Math.round(fixedRatio * 100) + "%",
+      bar: fixedRatio == null ? 0 : Math.min(fixedRatio * 100, 100),
+      tone: fixedRatio == null ? "" : healthTone(fixedRatio, 0.5, 0.7),
+      note: fixedRatio == null ? "填入月收入后显示"
+        : (fixedRatio <= 0.5 ? "健康 · 弹性空间充足" : fixedRatio <= 0.7 ? "偏硬 · 可考虑砍订阅" : "结构风险 · 弹性空间很薄") },
+    { k: "存款率",
+      v: savingsRatio == null ? "—" : Math.round(savingsRatio * 100) + "%",
+      bar: savingsRatio == null ? 0 : Math.min(savingsRatio * 100, 100),
+      tone: savingsRatio == null ? "" : (savingsRatio >= 0.2 ? "safe" : savingsRatio >= 0.1 ? "watch" : "danger"),
+      note: savingsRatio == null ? "填入存款目标后显示"
+        : (savingsRatio >= 0.2 ? "健康（≥20%）" : savingsRatio >= 0.1 ? "偏紧（10–20%）" : "偏低（<10%）") },
+    { k: "消耗节奏",
+      v: snap.discretionaryCents <= 0 ? "—" : (pacePp >= 0 ? "快 " + pacePp + "pp" : "慢 " + Math.abs(pacePp) + "pp"),
+      bar: snap.discretionaryCents <= 0 ? 0 : Math.min(Math.max(snap.paceRatio * 100, 0), 100),
+      tone: snap.discretionaryCents <= 0 ? "" : (pacePp <= 8 ? "safe" : pacePp <= 20 ? "watch" : "danger"),
+      note: "弹性已用 " + Math.round(snap.paceRatio * 100) + "% vs 时间过了 " + Math.round(snap.timeRatio * 100) + "%" },
+  ];
+
+  host.innerHTML = "";
+  for (const r of rows) {
+    const div = document.createElement("div");
+    const top = document.createElement("div");
+    top.className = "d-top";
+    const k = document.createElement("span"); k.className = "k"; k.textContent = r.k;
+    const v = document.createElement("span"); v.className = "v num"; v.textContent = r.v;
+    top.appendChild(k); top.appendChild(v);
+    const bar = document.createElement("div"); bar.className = "mini";
+    const fill = document.createElement("i");
+    fill.className = r.tone; fill.style.width = r.bar + "%";
+    bar.appendChild(fill);
+    const note = document.createElement("div");
+    note.className = "tiny muted";
+    note.style.marginTop = "5px";
+    note.textContent = r.note;
+    div.appendChild(top); div.appendChild(bar); div.appendChild(note);
+    host.appendChild(div);
+  }
+}
+
+const STATUS_LABEL = { reserved: "未付", paid: "已付", skipped: "跳过" };
+
+function renderFixedList() {
+  const host = $("fixedList");
+  const fixed = currentMonth().fixed;
+  if (!fixed.length) {
+    host.innerHTML = '<div class="empty">还没有固定开销。<br>加上房租，它就会在月初被优先锁住。</div>';
+    return;
+  }
+  host.innerHTML = "";
+  for (const f of fixed) {
+    const row = document.createElement("div");
+    row.className = "item";
+
+    const body = document.createElement("div");
+    body.className = "body";
+    const name = document.createElement("div"); name.className = "name"; name.textContent = f.name;
+    const meta = document.createElement("div"); meta.className = "meta";
+    meta.textContent = (f.dueDay === "month_end" ? "每月末" : "每月 " + f.dueDay + " 号") +
+      (f.actualCents != null ? " · 实际 " + Core.fmtCents(f.actualCents) : "");
+    body.appendChild(name); body.appendChild(meta);
+
+    const input = document.createElement("input");
+    input.type = "number"; input.min = "0"; input.step = "0.01"; input.inputMode = "decimal";
+    input.value = ((f.estimatedCents || 0) / 100).toString();
+    input.style.cssText = "width:84px;height:34px;padding:0 8px;text-align:right;border:1px solid var(--line-strong);border-radius:9px;background:#FBFBFC";
+    input.dataset.fixedAmount = f.id;
+    input.setAttribute("aria-label", f.name + " 金额");
+
+    const statusBtn = document.createElement("button");
+    statusBtn.className = "tag";
+    statusBtn.style.height = "30px";
+    if (f.status === "paid") { statusBtn.style.background = "rgba(14,159,110,.12)"; statusBtn.style.color = "#0B7A55"; }
+    else if (f.status === "skipped") { statusBtn.style.background = "#F1F3F5"; statusBtn.style.color = "#8A8F98"; }
+    else { statusBtn.style.background = "rgba(245,158,11,.14)"; statusBtn.style.color = "#A1620A"; }
+    statusBtn.textContent = STATUS_LABEL[f.status] || "未付";
+    statusBtn.title = "点一下切换：未付 → 已付 → 跳过";
+    statusBtn.dataset.fixedStatus = f.id;
+
+    const del = document.createElement("button");
+    del.className = "del"; del.textContent = "×";
+    del.dataset.fixedDel = f.id;
+    del.setAttribute("aria-label", "删除 " + f.name);
+
+    row.appendChild(body); row.appendChild(input); row.appendChild(statusBtn); row.appendChild(del);
+    host.appendChild(row);
+  }
+}
+
+function renderPlanInputs() {
+  const m = currentMonth();
+  setInputValue($("incomeInput"), m.incomeCents ? m.incomeCents / 100 : "");
+  const goal = m.savings[0];
+  setInputValue($("savingsInput"), goal && goal.targetCents ? goal.targetCents / 100 : "");
+  setInputValue($("floorRatioInput"), store.config.floorRatio);
+}
+
+function renderAll() {
+  snapshot = Core.computeSnapshot(buildInput());
+  $("monthLabel").textContent = viewMonth.slice(0, 4) + " 年 " + Number(viewMonth.slice(5, 7)) + " 月";
+  renderHero(snapshot);
+  renderMonthCard(snapshot);
+  renderTodayList(snapshot);
+  renderAiCard(snapshot);
+  renderDiag(snapshot);
+  renderFixedList();
+  renderPlanInputs();
+  $("parseMode").textContent = aiSettings.apiKey
+    ? ("AI 解析 · " + (aiSettings.provider === "openai" ? "OpenAI" : "DeepSeek"))
+    : "本地解析";
+  saveStore();
+}
+
+/* ==========================================================================
+   事件与数据写入
+   ========================================================================== */
+function makeTransaction(parsed) {
+  const id = newId();
+  return {
+    id: id,
+    amountCents: parsed.isRefund ? -Math.abs(parsed.amountCents) : Math.abs(parsed.amountCents),
+    localDate: parsed.localDate || (snapshot ? snapshot.today : Core.todayISO()),
+    necessity: parsed.necessity || "optional",
+    scope: "flex",
+    status: "settled",
+    isBigTicket: false,
+    amortize: true,
+    tags: parsed.tags || [],
+    note: parsed.note || "未备注",
+    source: parsed.source || "local",
+    idempotencyKey: id,
+    createdAt: new Date().toISOString(),
+  };
+}
+function commitTransaction(parsed) {
+  const tx = makeTransaction(parsed);
+  currentMonth().transactions.push(tx);
+  renderAll();
+  const left = snapshot.todayRemainingCents;
+  const tail = left >= 0
+    ? "今天还剩 " + Core.fmtCents(left)
+    : "今天已超出 " + Core.fmtCents(Math.abs(left));
+  showToast("记好了 —— " + Core.fmtCents(tx.amountCents) + "，" + tail, "撤销", () => undoTransaction(tx.id));
+}
+function undoTransaction(id) {
+  const m = currentMonth();
+  const idx = m.transactions.findIndex((t) => t.id === id);
+  if (idx >= 0) {
+    m.transactions.splice(idx, 1);
+    renderAll();
+    showToast("已撤销");
+  }
+}
+
+async function handleAddSubmit(event) {
+  event.preventDefault();
+  if (uiState.busy) return;
+  const raw = $("entryInput").value.trim();
+  if (!raw) return;
+
+  let parsed = null;
+  const useAi = !!(aiSettings.apiKey && aiSettings.apiKey.trim());
+
+  if (useAi) {
+    uiState.busy = true;
+    $("addBtn").disabled = true;
+    $("addBtn").textContent = "解析中";
+    try {
+      parsed = await parseWithAI(raw, snapshot ? snapshot.today : Core.todayISO());
+      if (!parsed) throw new Error("没解析出金额");
+    } catch (err) {
+      // 网络/Key/额度问题都不该阻塞记账 —— 静默回退到本地解析
+      showToast("AI 解析失败（" + ((err && err.message) || "未知错误") + "），已用本地解析");
+      parsed = null;
+    } finally {
+      uiState.busy = false;
+      $("addBtn").disabled = false;
+      $("addBtn").textContent = "记下";
+    }
+  }
+  if (!parsed) parsed = Core.parseQuickEntry(raw);
+  if (!parsed) { showToast("没看懂金额，试试「打车 35」"); return; }
+
+  // 用户的显式选择 > 解析结果（没手动点过则采用解析的预填）
+  if (uiState.refund) parsed.isRefund = true;
+  if (uiState.necessityTouched) parsed.necessity = uiState.necessity;
+  else uiState.necessity = parsed.necessity;
+
+  $("entryInput").value = "";
+  uiState.refund = false;
+  uiState.necessityTouched = false;
+  syncNecessitySeg();
+  commitTransaction(parsed);
+}
+
+function syncNecessitySeg() {
+  $("necessitySeg").querySelectorAll("[data-necessity]").forEach((el) => {
+    el.classList.toggle("on", el.dataset.necessity === uiState.necessity);
+  });
+  $("refundTag").classList.toggle("on", uiState.refund);
+}
+
+function bindEvents() {
+  /* 月份切换 */
+  $("prevMonth").addEventListener("click", () => { viewMonth = Core.shiftMonth(viewMonth, -1); renderAll(); });
+  $("nextMonth").addEventListener("click", () => { viewMonth = Core.shiftMonth(viewMonth, 1); renderAll(); });
+
+  /* 记账 */
+  $("addForm").addEventListener("submit", handleAddSubmit);
+  $("necessitySeg").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-necessity]");
+    if (!btn) return;
+    uiState.necessity = btn.dataset.necessity;
+    uiState.necessityTouched = true;      // 用户显式选择过，之后不再被解析结果覆盖
+    syncNecessitySeg();
+  });
+  $("refundTag").addEventListener("click", () => { uiState.refund = !uiState.refund; syncNecessitySeg(); });
+  $("todayList").addEventListener("click", (e) => {
+    const del = e.target.closest("[data-del]");
+    if (del) undoTransaction(del.dataset.del);
+  });
+
+  /* 计划：收入 / 存款目标 */
+  $("incomeInput").addEventListener("change", (e) => {
+    const cents = Core.yuanToCents(e.target.value);
+    currentMonth().incomeCents = (cents == null || cents < 0) ? 0 : cents;
+    renderAll();
+  });
+  $("savingsInput").addEventListener("change", (e) => {
+    const cents = Core.yuanToCents(e.target.value);
+    const value = (cents == null || cents < 0) ? 0 : cents;
+    const m = currentMonth();
+    if (!m.savings.length) {
+      m.savings.push({ id: newId(), name: "月度储蓄", targetCents: value, percent: null, status: "planned" });
+    } else {
+      m.savings[0].targetCents = value;
+    }
+    renderAll();
+  });
+
+  /* 固定开销：新增 / 改金额 / 切状态 / 删除 */
+  $("fixedForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = $("fixedName").value.trim();
+    const cents = Core.yuanToCents($("fixedAmount").value);
+    if (!name) { showToast("给这笔固定开销起个名字"); return; }
+    if (cents == null || cents <= 0) { showToast("填个金额，比如 3500"); return; }
+    currentMonth().fixed.push({
+      id: newId(), name: name, kind: "bill", estimatedCents: cents, actualCents: null,
+      dueDay: "month_end", autoDebit: false, status: "reserved", active: true,
+    });
+    $("fixedName").value = "";
+    $("fixedAmount").value = "";
+    renderAll();
+    showToast("已加入 —— 它会在日常消费之前先被扣掉");
+  });
+  $("fixedList").addEventListener("change", (e) => {
+    const input = e.target.closest("[data-fixed-amount]");
+    if (!input) return;
+    const cents = Core.yuanToCents(input.value);
+    const item = currentMonth().fixed.find((f) => f.id === input.dataset.fixedAmount);
+    if (!item) return;
+    item.estimatedCents = (cents == null || cents < 0) ? 0 : cents;
+    renderAll();
+  });
+  $("fixedList").addEventListener("click", (e) => {
+    const statusBtn = e.target.closest("[data-fixed-status]");
+    if (statusBtn) {
+      const item = currentMonth().fixed.find((f) => f.id === statusBtn.dataset.fixedStatus);
+      if (item) {
+        item.status = item.status === "reserved" ? "paid"
+                    : item.status === "paid" ? "skipped" : "reserved";
+        renderAll();
+      }
+      return;
+    }
+    const del = e.target.closest("[data-fixed-del]");
+    if (del) {
+      const m = currentMonth();
+      const idx = m.fixed.findIndex((f) => f.id === del.dataset.fixedDel);
+      if (idx < 0) return;
+      const removed = m.fixed.splice(idx, 1)[0];
+      renderAll();
+      showToast("已删除「" + removed.name + "」", "撤销", () => { m.fixed.splice(idx, 0, removed); renderAll(); });
+    }
+  });
+
+  /* AI 提醒卡上的「下一步」 */
+  $("aiOps").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-action]");
+    if (!btn) return;
+    const action = btn.dataset.action;
+    if (action === "showPlan7") {
+      const plan = Core.rescheduleDailyAllowances(snapshot, 7);
+      showToast("接下来 7 天：" + plan.map((d) => Core.fmtCents(d.allowanceCents)).join(" · "));
+    } else if (action === "openPlan") {
+      $("incomeInput").closest("section").scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(() => $("incomeInput").focus(), 360);
+    } else if (action === "acceptSmoothed") {
+      showToast("好 —— 就按每天 " + Core.fmtCents(snapshot.safeToSpendCents) + " 过" +
+        (snapshot.monthEndAdjustmentCents < 0
+          ? "，缺口 " + Core.fmtCents(snapshot.monthEndAdjustmentCents) + " 月底结算" : ""));
+    } else if (action === "markOffBudget") {
+      markLatestBigTicketOffBudget();
+    }
+  });
+}
+
+/** 把今天最近的一笔支出标记为「预算外」（不计入日常额度） */
+function markLatestBigTicketOffBudget() {
+  const m = currentMonth();
+  const candidates = m.transactions.filter(
+    (t) => t.localDate === snapshot.today && t.scope === "flex" && t.amountCents > 0);
+  if (!candidates.length) { showToast("今天没有可标记的支出"); return; }
+  candidates.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const target = candidates[0];
+  target.scope = "off_budget";
+  target.offBudgetReason = "user_marked";
+  renderAll();
+  showToast("已记为预算外 —— 不再占用日常额度", "撤销", () => {
+    target.scope = "flex";
+    delete target.offBudgetReason;
+    renderAll();
+  });
+}
+
+/* ==========================================================================
+   设置弹层：AI Key / 预算参数 / 数据导入导出
+   ========================================================================== */
+function openSheet() {
+  $("providerSelect").value = aiSettings.provider;
+  $("apiKeyInput").value = aiSettings.apiKey || "";
+  $("modelInput").value = aiSettings.model || "";
+  $("endpointInput").value = aiSettings.endpoint || "";
+  $("rememberToggle").classList.toggle("on", aiSettings.remember);
+  $("rememberToggle").setAttribute("aria-checked", aiSettings.remember ? "true" : "false");
+  $("floorRatioInput").value = store.config.floorRatio;
+  $("sheetMask").classList.add("open");
+  $("settingsSheet").classList.add("open");
+}
+function closeSheet() {
+  $("sheetMask").classList.remove("open");
+  $("settingsSheet").classList.remove("open");
+}
+function bindSheetEvents() {
+  $("openSettings").addEventListener("click", openSheet);
+  $("closeSettings").addEventListener("click", closeSheet);
+  $("sheetMask").addEventListener("click", closeSheet);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+
+  $("providerSelect").addEventListener("change", (e) => {
+    aiSettings.provider = e.target.value;
+    saveAiSettings(); renderAll();
+  });
+  $("apiKeyInput").addEventListener("change", (e) => {
+    aiSettings.apiKey = e.target.value.trim();
+    saveAiSettings(); renderAll();
+    showToast(aiSettings.apiKey ? "Key 已保存，之后会用 AI 解析" : "已清空 Key，改用本地解析");
+  });
+  $("modelInput").addEventListener("change", (e) => {
+    aiSettings.model = e.target.value.trim();
+    saveAiSettings(); renderAll();
+  });
+  $("endpointInput").addEventListener("change", (e) => {
+    aiSettings.endpoint = e.target.value.trim();
+    saveAiSettings();
+    showToast(aiSettings.endpoint ? "已使用自定义接口地址" : "已恢复官方接口地址");
+  });
+  const toggleRemember = () => {
+    aiSettings.remember = !aiSettings.remember;
+    $("rememberToggle").classList.toggle("on", aiSettings.remember);
+    $("rememberToggle").setAttribute("aria-checked", aiSettings.remember ? "true" : "false");
+    saveAiSettings();
+  };
+  $("rememberToggle").addEventListener("click", toggleRemember);
+  $("rememberToggle").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleRemember(); }
+  });
+  $("clearKey").addEventListener("click", () => {
+    aiSettings.apiKey = "";
+    $("apiKeyInput").value = "";
+    try { sessionStorage.removeItem(LS_AI); } catch (err) { /* ignore */ }
+    saveAiSettings(); renderAll();
+    showToast("已清除 API Key");
+  });
+  $("testAi").addEventListener("click", async () => {
+    if (!aiSettings.apiKey) { showToast("先填 API Key"); return; }
+    const btn = $("testAi");
+    btn.disabled = true; btn.textContent = "测试中";
+    try {
+      await testAiConnection();
+      showToast("连接正常，可以用 AI 解析了");
+    } catch (err) {
+      showToast("连接失败：" + ((err && err.message) || "未知错误"));
+    } finally {
+      btn.disabled = false; btn.textContent = "测试连接";
+    }
+  });
+  $("floorRatioInput").addEventListener("change", (e) => {
+    let value = Number(e.target.value);
+    if (!isFinite(value)) value = 0.6;
+    value = Math.min(Math.max(value, 0), 1);
+    store.config.floorRatio = value;
+    e.target.value = value;
+    renderAll();
+  });
+
+  $("exportData").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(store, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "yueyue-budget-" + Core.todayISO() + ".json";
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("已导出 JSON 备份");
+  });
+  $("importBtn").addEventListener("click", () => $("importFile").click());
+  $("importFile").addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result));
+        if (!parsed || parsed.version !== 1 || typeof parsed.months !== "object") {
+          throw new Error("文件格式不对");
+        }
+        store = parsed;
+        store.config = store.config || { floorRatio: 0.6 };
+        ensureMonth(viewMonth);
+        renderAll();
+        showToast("导入成功");
+      } catch (err) {
+        showToast("导入失败：" + ((err && err.message) || "无法解析"));
+      } finally { e.target.value = ""; }
+    };
+    reader.readAsText(file);
+  });
+  $("resetData").addEventListener("click", () => {
+    if (!confirm("确定清空这台设备上的全部预算与记账数据？此操作无法撤销。")) return;
+    try { localStorage.removeItem(LS_STORE); } catch (err) { /* ignore */ }
+    store = loadStore();
+    ensureMonth(viewMonth);
+    renderAll();
+    closeSheet();
+    showToast("已清空，可以从头开始");
+  });
+}
+
+/* ==========================================================================
+   启动
+   ========================================================================== */
+function init() {
+  store = loadStore();
+  aiSettings = loadAiSettings();
+  viewMonth = Core.todayISO().slice(0, 7);
+  store.config.floorRatio = typeof store.config.floorRatio === "number" ? store.config.floorRatio : 0.6;
+  ensureMonth(viewMonth);
+  bindEvents();
+  bindSheetEvents();
+  syncNecessitySeg();
+  renderAll();
+}
+init();
+</script>
+</body>
+</html>

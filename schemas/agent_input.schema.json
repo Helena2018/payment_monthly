@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://budget.example.com/schemas/agent_input.schema.json",
+  "title": "AI 财务助理 Agent 输入契约",
+  "description": "聊天调用时传给 LLM 的结构化数据。核心 5 字段是必需项（由调用方从账本聚合），derived 是引擎算好的派生值（推荐传，存在时 Agent 必须直接采用、禁止自行重算）。所有金额为整数「分」。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["month_income", "fixed_costs", "target_savings", "spent_so_far", "days_left"],
+  "properties": {
+    "currency": {
+      "type": "string",
+      "default": "USD",
+      "description": "ISO-4217，如 USD / CNY / JPY。仅影响展示格式。"
+    },
+    "unit": {
+      "enum": ["cents", "major"],
+      "default": "cents",
+      "description": "cents = 整数分（推荐，见 ADR-001）；major = 主币种小数（仅兼容旧客户端）。"
+    },
+    "month_income": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "本月税后可用收入（含上月结转，若有）。"
+    },
+    "fixed_costs": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "固定必要开销合计：房租/房贷、水电网、保险、订阅、贷款等。"
+    },
+    "target_savings": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "计划存款（已计入优先扣除）。"
+    },
+    "spent_so_far": {
+      "type": "integer",
+      "description": "★只含日常弹性开销，且已冲减退款。不含 fixed_costs、不含已存的钱。负数=净退款。"
+    },
+    "days_left": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 31,
+      "description": "本月剩余天数，含今天（今天还没花出去的钱当然算可花）。"
+    },
+    "month_days_total": {
+      "type": "integer",
+      "minimum": 28,
+      "maximum": 31,
+      "description": "本月总天数（28/29/30/31）。缺失时 Agent 不得臆测，应说明无法给出日基线。"
+    },
+    "locale": { "type": "string", "description": "如 zh-CN，决定回复语言与数字格式。" },
+    "user_message": {
+      "type": ["string", "null"],
+      "description": "用户本轮自然语言提问；null = 无提问（例如系统主动生成的提醒卡片）。"
+    },
+    "derived": {
+      "type": "object",
+      "description": "引擎输出（BudgetSnapshot 的对外子集）。存在时 Agent 必须直接采用这些数字。",
+      "additionalProperties": false,
+      "properties": {
+        "state": { "enum": ["onboarding", "healthy", "watch", "smoothed", "overdrawn"] },
+        "discretionary_cents": { "type": "integer", "description": "可自由支配总额 F" },
+        "remaining_cents": { "type": "integer", "description": "剩余可支配余额（真值）" },
+        "baseline_daily_cents": { "type": "integer", "description": "日基线 B（常量锚）" },
+        "floor_daily_cents": { "type": "integer", "description": "保底线 floor = floor(B × floor_ratio)" },
+        "live_daily_cents": { "type": "integer", "description": "真值日均 max(remaining,0)/days_left" },
+        "safe_to_spend_cents": { "type": "integer", "description": "★今日安全可花额度（展示口径）" },
+        "today_spent_cents": { "type": "integer" },
+        "today_remaining_cents": { "type": "integer" },
+        "month_end_adjustment_cents": { "type": "integer", "description": "负值=保底模式下由下月承担的缺口" },
+        "pace_ratio_pct": { "type": "integer" },
+        "time_ratio_pct": { "type": "integer" },
+        "projected_month_end_remaining_cents": { "type": "integer", "description": "线性外推的月末剩余，负=预计缺口" },
+        "projected_next_month_carryover_cents": {
+          "type": "integer",
+          "description": "预计结转到下月的金额（正=结余滚入，负=透支扣减）。等于引擎的 projectedCarryoverCents。"
+        },
+        "alerts": {
+          "type": "array",
+          "description": "引擎产出的告警（facts 里是全部数字，文案由本 Agent 生成）。",
+          "items": {
+            "type": "object",
+            "required": ["code"],
+            "properties": {
+              "code": {
+                "enum": [
+                  "T1_PACE_FAST",
+                  "T2_TODAY_OVER",
+                  "T3_BIG_TICKET",
+                  "T4_CONSECUTIVE_OVER",
+                  "T5_MONTH_END_GAP",
+                  "T6_FIXED_DUE",
+                  "T7_POSITIVE"
+                ]
+              },
+              "severity": { "enum": ["info", "gentle", "watch"] },
+              "messageKey": { "type": "string" },
+              "facts": { "type": "object", "additionalProperties": true }
+            }
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "description": "健康度阈值（可下发调整）。缺失时 Agent 使用系统提示中的默认值。",
+      "additionalProperties": false,
+      "properties": {
+        "floor_ratio": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.6 },
+        "savings_ratio_healthy": { "type": "number", "default": 0.2 },
+        "savings_ratio_tight": { "type": "number", "default": 0.1 },
+        "fixed_ratio_watch": { "type": "number", "default": 0.5 },
+        "fixed_ratio_risk": { "type": "number", "default": 0.7 },
+        "pace_tolerance_pp": { "type": "number", "default": 8 }
+      }
+    }
+  }
+}

@@ -1,0 +1,422 @@
+{
+  "$comment": "黄金测试向量（golden vectors）。packages/core/test/golden.test.ts 与 tests/test_engine.py 共用同一份数据，用于保证端侧 TS 引擎与后端 Python 引擎逐位一致。所有金额单位=分(cent)，所有除法向下取整。expectSnapshot 被两端共同断言；expectAlertCodes 只在端侧断言（告警文案归属端侧，见 ADR-009）。",
+  "cases": [
+    {
+      "name": "01_healthy_mid_month",
+      "note": "月中、节奏健康、无大额：日额度=真值日均，并给出正向提醒",
+      "today": "2026-09-15",
+      "budget": { "id": "b1", "month": "2026-09", "incomeCents": 2000000 },
+      "fixedExpenses": [
+        { "id": "f1", "name": "房租", "estimatedCents": 350000, "dueDay": 1, "status": "paid" },
+        { "id": "f2", "name": "电费", "estimatedCents": 18000, "dueDay": 25, "status": "reserved" },
+        { "id": "f3", "name": "宽带", "estimatedCents": 12000, "dueDay": 10, "status": "paid" },
+        { "id": "f4", "name": "保险", "estimatedCents": 50000, "dueDay": 15, "status": "paid" }
+      ],
+      "savingsGoals": [{ "id": "g1", "targetCents": 300000 }],
+      "transactions": [
+        { "id": "t1", "amountCents": 18500, "localDate": "2026-09-03", "necessity": "optional" },
+        { "id": "t2", "amountCents": 32000, "localDate": "2026-09-05", "necessity": "necessary" },
+        { "id": "t3", "amountCents": 54000, "localDate": "2026-09-08", "necessity": "optional" },
+        { "id": "t4", "amountCents": 25600, "localDate": "2026-09-10", "necessity": "unclassified" },
+        { "id": "t5", "amountCents": 12800, "localDate": "2026-09-12", "necessity": "optional" }
+      ],
+      "expectSnapshot": {
+        "totalDays": 30,
+        "elapsedDays": 15,
+        "daysLeft": 16,
+        "hardExpenseCents": 430000,
+        "savingsCents": 300000,
+        "committedCents": 730000,
+        "discretionaryCents": 1270000,
+        "baselineCents": 42333,
+        "floorCents": 25399,
+        "spentCents": 142900,
+        "remainingCents": 1127100,
+        "liveBaselineCents": 70443,
+        "safeToSpendCents": 70443,
+        "todaySpentCents": 0,
+        "todayRemainingCents": 70443,
+        "monthEndAdjustmentCents": 0,
+        "paceSpentCents": 142900,
+        "paceGapBp": -3875,
+        "projectedMonthEndRemainingCents": 974684,
+        "state": "healthy"
+      },
+      "expectAlertCodes": ["T7_POSITIVE"]
+    },
+    {
+      "name": "02_big_ticket_smoothed",
+      "note": "核心场景：月中买大件 ¥3000，真值日均跌破保底线 → 展示 floor 保底，缺口记为月末调节项；但节奏口径因平摊而不报警 T1",
+      "today": "2026-09-20",
+      "budget": { "id": "b2", "month": "2026-09", "incomeCents": 1000000 },
+      "fixedExpenses": [
+        { "id": "f1", "name": "房租", "estimatedCents": 200000, "dueDay": 1, "status": "paid" },
+        { "id": "f2", "name": "电费", "estimatedCents": 20000, "dueDay": 25, "status": "reserved" },
+        { "id": "f3", "name": "宽带", "estimatedCents": 15000, "dueDay": 10, "status": "paid" },
+        { "id": "f4", "name": "保险", "estimatedCents": 15000, "dueDay": 15, "status": "paid" },
+        { "id": "f5", "name": "视频订阅", "kind": "subscription", "estimatedCents": 30000, "dueDay": 5, "status": "skipped" }
+      ],
+      "savingsGoals": [{ "id": "g1", "targetCents": 150000 }],
+      "transactions": [
+        { "id": "t1", "amountCents": 30000, "localDate": "2026-09-03", "necessity": "optional" },
+        { "id": "t2", "amountCents": 30000, "localDate": "2026-09-06", "necessity": "optional" },
+        { "id": "t3", "amountCents": 30000, "localDate": "2026-09-09", "necessity": "optional" },
+        { "id": "t4", "amountCents": 30000, "localDate": "2026-09-12", "necessity": "optional" },
+        { "id": "t5", "amountCents": 30000, "localDate": "2026-09-15", "necessity": "optional" },
+        { "id": "t6", "amountCents": 30000, "localDate": "2026-09-18", "necessity": "optional" },
+        { "id": "t7", "amountCents": 300000, "localDate": "2026-09-20", "necessity": "optional", "note": "笔记本电脑" }
+      ],
+      "expectSnapshot": {
+        "totalDays": 30,
+        "elapsedDays": 20,
+        "daysLeft": 11,
+        "fixedSkippedCents": 30000,
+        "hardExpenseCents": 250000,
+        "savingsCents": 150000,
+        "committedCents": 400000,
+        "discretionaryCents": 600000,
+        "baselineCents": 20000,
+        "floorCents": 12000,
+        "spentCents": 480000,
+        "remainingCents": 120000,
+        "liveBaselineCents": 10909,
+        "safeToSpendCents": 12000,
+        "todaySpentCents": 300000,
+        "todayRemainingCents": -288000,
+        "monthEndAdjustmentCents": -12000,
+        "paceSpentCents": 207273,
+        "paceGapBp": -3212,
+        "projectedMonthEndRemainingCents": -144000,
+        "amortizedCount": 1,
+        "amortizedSpreadDays": 11,
+        "amortizedDailyDragCents": 27273,
+        "state": "smoothed"
+      },
+      "expectAlertCodes": ["T2_TODAY_OVER"]
+    },
+    {
+      "name": "03_overdrawn_late_month",
+      "note": "月末已透支：日额度归零（永不显示负数），剩余缺口靠下月 carryover 承接",
+      "today": "2026-09-28",
+      "budget": { "id": "b3", "month": "2026-09", "incomeCents": 1000000 },
+      "fixedExpenses": [
+        { "id": "f1", "name": "房租", "estimatedCents": 200000, "dueDay": 1, "status": "paid" },
+        { "id": "f2", "name": "电费", "estimatedCents": 20000, "dueDay": 25, "status": "paid" },
+        { "id": "f3", "name": "宽带", "estimatedCents": 15000, "dueDay": 10, "status": "paid" },
+        { "id": "f4", "name": "保险", "estimatedCents": 15000, "dueDay": 15, "status": "paid" }
+      ],
+      "savingsGoals": [{ "id": "g1", "targetCents": 150000 }],
+      "transactions": [
+        { "id": "t1", "amountCents": 30000, "localDate": "2026-09-03", "necessity": "optional" },
+        { "id": "t2", "amountCents": 30000, "localDate": "2026-09-06", "necessity": "optional" },
+        { "id": "t3", "amountCents": 30000, "localDate": "2026-09-09", "necessity": "optional" },
+        { "id": "t4", "amountCents": 30000, "localDate": "2026-09-12", "necessity": "optional" },
+        { "id": "t5", "amountCents": 30000, "localDate": "2026-09-15", "necessity": "optional" },
+        { "id": "t6", "amountCents": 30000, "localDate": "2026-09-18", "necessity": "optional" },
+        { "id": "t7", "amountCents": 300000, "localDate": "2026-09-20", "necessity": "optional" },
+        { "id": "t8", "amountCents": 200000, "localDate": "2026-09-25", "necessity": "optional" }
+      ],
+      "expectSnapshot": {
+        "elapsedDays": 28,
+        "daysLeft": 3,
+        "committedCents": 400000,
+        "discretionaryCents": 600000,
+        "spentCents": 680000,
+        "remainingCents": -80000,
+        "liveBaselineCents": 0,
+        "safeToSpendCents": 0,
+        "todaySpentCents": 0,
+        "todayRemainingCents": 0,
+        "monthEndAdjustmentCents": 0,
+        "paceSpentCents": 558790,
+        "paceGapBp": -20,
+        "projectedMonthEndRemainingCents": -152855,
+        "amortizedCount": 2,
+        "state": "overdrawn"
+      },
+      "expectAlertCodes": ["T5_MONTH_END_GAP"]
+    },
+    {
+      "name": "04_refund_and_bill_variance",
+      "note": "浮动账单实际>预估（电费多 ¥40）自动回冲 + 退款为负额自动加回余额",
+      "today": "2026-09-16",
+      "budget": { "id": "b4", "month": "2026-09", "incomeCents": 1000000 },
+      "fixedExpenses": [
+        { "id": "f1", "name": "房租", "estimatedCents": 200000, "dueDay": 1, "status": "paid" },
+        {
+          "id": "f2",
+          "name": "电费",
+          "estimatedCents": 20000,
+          "actualCents": 24000,
+          "dueDay": 15,
+          "status": "paid"
+        },
+        { "id": "f3", "name": "宽带", "estimatedCents": 15000, "dueDay": 10, "status": "paid" },
+        { "id": "f4", "name": "保险", "estimatedCents": 15000, "dueDay": 15, "status": "paid" }
+      ],
+      "savingsGoals": [{ "id": "g1", "targetCents": 150000 }],
+      "transactions": [
+        { "id": "t1", "amountCents": 30000, "localDate": "2026-09-03", "necessity": "optional" },
+        { "id": "t2", "amountCents": 30000, "localDate": "2026-09-06", "necessity": "necessary" },
+        { "id": "t3", "amountCents": 30000, "localDate": "2026-09-09", "necessity": "optional" },
+        { "id": "t4", "amountCents": 30000, "localDate": "2026-09-12", "necessity": "unclassified" },
+        {
+          "id": "t5",
+          "amountCents": -5000,
+          "localDate": "2026-09-16",
+          "necessity": "unclassified",
+          "note": "退货退款"
+        }
+      ],
+      "expectSnapshot": {
+        "daysLeft": 15,
+        "hardExpenseCents": 254000,
+        "committedCents": 404000,
+        "discretionaryCents": 596000,
+        "baselineCents": 19866,
+        "floorCents": 11919,
+        "spentCents": 115000,
+        "remainingCents": 481000,
+        "liveBaselineCents": 32066,
+        "safeToSpendCents": 32066,
+        "todaySpentCents": -5000,
+        "todayRemainingCents": 37066,
+        "monthEndAdjustmentCents": 0,
+        "paceSpentCents": 115000,
+        "paceGapBp": -3404,
+        "projectedMonthEndRemainingCents": 373195,
+        "state": "healthy"
+      },
+      "expectAlertCodes": ["T7_POSITIVE"]
+    },
+    {
+      "name": "05_february_due_day_overflow",
+      "note": "2 月只有 28 天：dueDay=31 被夹到 2/28；分母用 28 天而不是 30 天",
+      "today": "2026-02-14",
+      "budget": { "id": "b5", "month": "2026-02", "incomeCents": 800000 },
+      "fixedExpenses": [
+        { "id": "f1", "name": "房租", "estimatedCents": 200000, "dueDay": 31, "status": "reserved" }
+      ],
+      "savingsGoals": [{ "id": "g1", "targetCents": 100000 }],
+      "transactions": [
+        { "id": "t1", "amountCents": 20000, "localDate": "2026-02-10", "necessity": "optional" },
+        { "id": "t2", "amountCents": 15000, "localDate": "2026-02-14", "necessity": "optional" }
+      ],
+      "expectSnapshot": {
+        "totalDays": 28,
+        "elapsedDays": 14,
+        "daysLeft": 15,
+        "hardExpenseCents": 200000,
+        "committedCents": 300000,
+        "discretionaryCents": 500000,
+        "baselineCents": 17857,
+        "floorCents": 10714,
+        "spentCents": 35000,
+        "remainingCents": 465000,
+        "liveBaselineCents": 31000,
+        "safeToSpendCents": 31000,
+        "todaySpentCents": 15000,
+        "todayRemainingCents": 16000,
+        "paceGapBp": -4300,
+        "projectedMonthEndRemainingCents": 427500,
+        "state": "healthy"
+      },
+      "expectAlertCodes": ["T7_POSITIVE"]
+    },
+    {
+      "name": "06_carryover_from_previous_month",
+      "note": "上月透支 ¥300 写入 carryoverCents=-30000，直接压低本月可支配总额",
+      "today": "2026-10-05",
+      "budget": {
+        "id": "b6",
+        "month": "2026-10",
+        "incomeCents": 1000000,
+        "carryoverCents": -30000
+      },
+      "fixedExpenses": [
+        { "id": "f1", "name": "房租", "estimatedCents": 200000, "dueDay": 1, "status": "paid" },
+        { "id": "f2", "name": "电费", "estimatedCents": 20000, "dueDay": 25, "status": "reserved" },
+        { "id": "f3", "name": "宽带", "estimatedCents": 15000, "dueDay": 10, "status": "paid" },
+        { "id": "f4", "name": "保险", "estimatedCents": 15000, "dueDay": 15, "status": "paid" }
+      ],
+      "savingsGoals": [{ "id": "g1", "targetCents": 150000 }],
+      "transactions": [
+        { "id": "t1", "amountCents": 10000, "localDate": "2026-10-03", "necessity": "optional" }
+      ],
+      "expectSnapshot": {
+        "totalDays": 31,
+        "elapsedDays": 5,
+        "daysLeft": 27,
+        "committedCents": 400000,
+        "discretionaryCents": 570000,
+        "baselineCents": 18387,
+        "floorCents": 11032,
+        "spentCents": 10000,
+        "remainingCents": 560000,
+        "liveBaselineCents": 20740,
+        "safeToSpendCents": 20740,
+        "todaySpentCents": 0,
+        "todayRemainingCents": 20740,
+        "paceGapBp": -1437,
+        "projectedMonthEndRemainingCents": 506000,
+        "state": "healthy"
+      },
+      "expectAlertCodes": ["T7_POSITIVE"]
+    },
+    {
+      "name": "07_onboarding_no_income",
+      "note": "全新用户：收入为 0 → 引导态，一切归零但不报错（不显示负数吓人）",
+      "today": "2026-09-01",
+      "budget": { "id": "b7", "month": "2026-09", "incomeCents": 0 },
+      "fixedExpenses": [],
+      "savingsGoals": [],
+      "transactions": [],
+      "expectSnapshot": {
+        "elapsedDays": 1,
+        "daysLeft": 30,
+        "committedCents": 0,
+        "discretionaryCents": 0,
+        "baselineCents": 0,
+        "floorCents": 0,
+        "spentCents": 0,
+        "remainingCents": 0,
+        "liveBaselineCents": 0,
+        "safeToSpendCents": 0,
+        "todaySpentCents": 0,
+        "todayRemainingCents": 0,
+        "monthEndAdjustmentCents": 0,
+        "paceSpentCents": 0,
+        "paceGapBp": -333,
+        "projectedMonthEndRemainingCents": 0,
+        "state": "onboarding"
+      },
+      "expectAlertCodes": ["T7_POSITIVE"]
+    },
+    {
+      "name": "08_off_budget_excluded",
+      "note": "标记为「预算外」的大额（年终奖买的电脑）不计入弹性池，也不进节奏口径",
+      "today": "2026-09-15",
+      "budget": { "id": "b8", "month": "2026-09", "incomeCents": 1000000 },
+      "fixedExpenses": [
+        { "id": "f1", "name": "房租", "estimatedCents": 200000, "dueDay": 1, "status": "paid" },
+        { "id": "f2", "name": "电费", "estimatedCents": 20000, "dueDay": 25, "status": "reserved" },
+        { "id": "f3", "name": "宽带", "estimatedCents": 15000, "dueDay": 10, "status": "paid" },
+        { "id": "f4", "name": "保险", "estimatedCents": 15000, "dueDay": 15, "status": "paid" }
+      ],
+      "savingsGoals": [{ "id": "g1", "targetCents": 150000 }],
+      "transactions": [
+        { "id": "t1", "amountCents": 30000, "localDate": "2026-09-03", "necessity": "optional" },
+        {
+          "id": "t2",
+          "amountCents": 300000,
+          "localDate": "2026-09-10",
+          "scope": "off_budget",
+          "offBudgetReason": "annual_bonus",
+          "necessity": "optional"
+        },
+        { "id": "t3", "amountCents": 20000, "localDate": "2026-09-15", "necessity": "optional" }
+      ],
+      "expectSnapshot": {
+        "elapsedDays": 15,
+        "daysLeft": 16,
+        "committedCents": 400000,
+        "discretionaryCents": 600000,
+        "baselineCents": 20000,
+        "floorCents": 12000,
+        "spentCents": 50000,
+        "remainingCents": 550000,
+        "liveBaselineCents": 34375,
+        "safeToSpendCents": 34375,
+        "todaySpentCents": 20000,
+        "todayRemainingCents": 14375,
+        "monthEndAdjustmentCents": 0,
+        "paceSpentCents": 50000,
+        "paceGapBp": -4167,
+        "projectedMonthEndRemainingCents": 496672,
+        "amortizedCount": 0,
+        "state": "healthy"
+      },
+      "expectAlertCodes": ["T7_POSITIVE"]
+    },
+    {
+      "name": "09_pace_fast_watch",
+      "note": "月中花太快（消耗 45.5% vs 时间 33.3%）→ 进入 watch，但未触发保底模式",
+      "today": "2026-09-10",
+      "budget": { "id": "b9", "month": "2026-09", "incomeCents": 1000000 },
+      "fixedExpenses": [
+        { "id": "f1", "name": "房租", "estimatedCents": 200000, "dueDay": 1, "status": "paid" },
+        { "id": "f2", "name": "电费", "estimatedCents": 20000, "dueDay": 25, "status": "reserved" },
+        { "id": "f3", "name": "宽带", "estimatedCents": 15000, "dueDay": 10, "status": "paid" },
+        { "id": "f4", "name": "保险", "estimatedCents": 15000, "dueDay": 15, "status": "paid" }
+      ],
+      "savingsGoals": [{ "id": "g1", "targetCents": 150000 }],
+      "transactions": [
+        { "id": "t1", "amountCents": 39000, "localDate": "2026-09-02", "necessity": "optional" },
+        { "id": "t2", "amountCents": 39000, "localDate": "2026-09-03", "necessity": "optional" },
+        { "id": "t3", "amountCents": 39000, "localDate": "2026-09-04", "necessity": "optional" },
+        { "id": "t4", "amountCents": 39000, "localDate": "2026-09-05", "necessity": "optional" },
+        { "id": "t5", "amountCents": 39000, "localDate": "2026-09-06", "necessity": "optional" },
+        { "id": "t6", "amountCents": 39000, "localDate": "2026-09-07", "necessity": "optional" },
+        { "id": "t7", "amountCents": 39000, "localDate": "2026-09-09", "necessity": "optional" }
+      ],
+      "expectSnapshot": {
+        "elapsedDays": 10,
+        "daysLeft": 21,
+        "committedCents": 400000,
+        "discretionaryCents": 600000,
+        "baselineCents": 20000,
+        "floorCents": 12000,
+        "spentCents": 273000,
+        "remainingCents": 327000,
+        "liveBaselineCents": 15571,
+        "safeToSpendCents": 15571,
+        "todaySpentCents": 0,
+        "todayRemainingCents": 15571,
+        "monthEndAdjustmentCents": 0,
+        "paceSpentCents": 273000,
+        "paceGapBp": 1217,
+        "projectedMonthEndRemainingCents": -246300,
+        "state": "watch"
+      },
+      "expectAlertCodes": ["T1_PACE_FAST"]
+    },
+    {
+      "name": "10_consecutive_over_and_fixed_due",
+      "note": "连续 3 天超过日基线 + 账单临近到期 → 命中 T4/T6/T7，展示层节流为「1 主 + 1 正向」",
+      "today": "2026-09-24",
+      "budget": { "id": "b10", "month": "2026-09", "incomeCents": 1000000 },
+      "fixedExpenses": [
+        { "id": "f1", "name": "房租", "estimatedCents": 200000, "dueDay": 1, "status": "paid" },
+        { "id": "f2", "name": "电费", "estimatedCents": 20000, "dueDay": 25, "status": "reserved" },
+        { "id": "f3", "name": "宽带", "estimatedCents": 15000, "dueDay": 10, "status": "paid" },
+        { "id": "f4", "name": "保险", "estimatedCents": 15000, "dueDay": 15, "status": "paid" }
+      ],
+      "savingsGoals": [{ "id": "g1", "targetCents": 150000 }],
+      "transactions": [
+        { "id": "t1", "amountCents": 25000, "localDate": "2026-09-22", "necessity": "optional" },
+        { "id": "t2", "amountCents": 25000, "localDate": "2026-09-23", "necessity": "optional" },
+        { "id": "t3", "amountCents": 25000, "localDate": "2026-09-24", "necessity": "optional" }
+      ],
+      "expectSnapshot": {
+        "elapsedDays": 24,
+        "daysLeft": 7,
+        "committedCents": 400000,
+        "discretionaryCents": 600000,
+        "baselineCents": 20000,
+        "floorCents": 12000,
+        "spentCents": 75000,
+        "remainingCents": 525000,
+        "liveBaselineCents": 75000,
+        "safeToSpendCents": 75000,
+        "todaySpentCents": 25000,
+        "todayRemainingCents": 50000,
+        "monthEndAdjustmentCents": 0,
+        "paceSpentCents": 75000,
+        "paceGapBp": -6750,
+        "projectedMonthEndRemainingCents": 503125,
+        "state": "healthy"
+      },
+      "expectAlertCodes": ["T6_FIXED_DUE", "T7_POSITIVE"]
+    }
+  ]
+}

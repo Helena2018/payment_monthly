@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://budget.example.com/schemas/budget.schema.json",
+  "title": "月度预算领域模型契约",
+  "description": "端侧(TypeScript)与后端(Python)的接口契约。金额一律为整数分(Cents)，任何小数分都是脏数据。字段名统一小驼峰（Pydantic 侧用 snake_case，序列化时转 camelCase）。",
+  "$comment": "派生指标（可支配余额、每日额度、节奏健康度…）不入库、不在本契约中，由 engine 纯函数计算，见 docs/architecture.md ADR-003。",
+  "$defs": {
+    "Cents": {
+      "type": "integer",
+      "description": "整数分。¥1 = 100。禁止 float。"
+    },
+    "DueDay": {
+      "oneOf": [
+        { "type": "integer", "minimum": 1, "maximum": 31 },
+        { "const": "month_end" }
+      ],
+      "description": "每月到期日；超出当月天数会被夹到月末（如 2 月的 31 号 → 2/28 或 2/29）。"
+    },
+    "ISODate": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "本地自然日。由端侧写入，后端不做时区推断。"
+    },
+    "ISOMonth": {
+      "type": "string",
+      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+    },
+    "MonthlyBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "month", "incomeCents", "payday", "carryoverCents", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "month": { "$ref": "#/$defs/ISOMonth" },
+        "incomeCents": { "$ref": "#/$defs/Cents", "minimum": 0, "description": "本月可用收入（税后到手）" },
+        "payday": { "$ref": "#/$defs/DueDay" },
+        "carryoverCents": { "$ref": "#/$defs/Cents", "description": "正=上月结余滚入；负=上月透支扣减" },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "FixedExpense": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "budgetId", "name", "kind", "estimatedCents", "dueDay", "autoDebit", "status", "reservedAt", "active"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "budgetId": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["bill", "debt", "subscription"] },
+        "estimatedCents": { "$ref": "#/$defs/Cents", "minimum": 0, "description": "月初用于「预留」的金额" },
+        "actualCents": {
+          "oneOf": [{ "$ref": "#/$defs/Cents", "minimum": 0 }, { "type": "null" }],
+          "description": "出账后真实金额；浮动账单差额自动回冲弹性池"
+        },
+        "dueDay": { "$ref": "#/$defs/DueDay" },
+        "autoDebit": { "type": "boolean" },
+        "status": { "enum": ["reserved", "paid", "skipped"] },
+        "reservedAt": { "$ref": "#/$defs/ISODate" },
+        "paidAt": { "oneOf": [{ "$ref": "#/$defs/ISODate" }, { "type": "null" }] },
+        "active": { "type": "boolean" }
+      }
+    },
+    "SavingsGoal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "budgetId", "name", "method", "targetCents", "autoTransferDay", "transferredCents", "status"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "budgetId": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "method": { "enum": ["fixed", "percent"] },
+        "targetCents": { "$ref": "#/$defs/Cents", "minimum": 0 },
+        "percent": {
+          "oneOf": [{ "type": "number", "minimum": 0, "maximum": 100 }, { "type": "null" }],
+          "description": "method='percent' 时必填（按收入百分比折算成整数分）"
+        },
+        "autoTransferDay": { "$ref": "#/$defs/DueDay" },
+        "transferredCents": { "$ref": "#/$defs/Cents", "minimum": 0 },
+        "status": { "enum": ["planned", "transferred", "skipped"] }
+      }
+    },
+    "DailyTransaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "budgetId", "amountCents", "occurredAt", "localDate", "necessity", "scope", "status", "isBigTicket", "amortize", "idempotencyKey", "version", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "budgetId": { "type": "string", "minLength": 1 },
+        "amountCents": { "$ref": "#/$defs/Cents", "description": "正=支出；负=退款（自动回冲余额）" },
+        "occurredAt": { "type": "string" },
+        "localDate": { "$ref": "#/$defs/ISODate" },
+        "necessity": { "enum": ["necessary", "optional", "unclassified"] },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "note": { "type": "string" },
+        "scope": { "enum": ["flex", "off_budget"] },
+        "status": { "enum": ["pending", "settled", "voided"] },
+        "isBigTicket": { "type": "boolean", "description": "单笔 ≥ bigTicketRatio × 日基线" },
+        "amortize": { "type": "boolean", "description": "是否参与节奏口径的跨日平摊" },
+        "offBudgetReason": { "type": "string", "description": "scope='off_budget' 时必填（审计）" },
+        "idempotencyKey": { "type": "string", "minLength": 1, "description": "离线补传去重键" },
+        "version": { "type": "integer", "minimum": 1, "description": "乐观并发控制" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "deletedAt": { "oneOf": [{ "type": "string" }, { "type": "null" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "scope": { "const": "off_budget" } }, "required": ["scope"] },
+          "then": { "required": ["offBudgetReason"] }
+        }
+      ]
+    },
+    "EngineConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "floorRatio": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.6 },
+        "bigTicketRatio": { "type": "number", "minimum": 1, "default": 2 },
+        "paceTolerance": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.08 },
+        "carryoverPolicy": { "enum": ["carry", "to_savings", "reset"], "default": "carry" },
+        "defaultOverspendPolicy": { "enum": ["deduct_next_month", "borrow_from_savings", "off_budget"], "default": "deduct_next_month" },
+        "rounding": { "enum": ["floor", "round"], "default": "floor" }
+      }
+    },
+    "SnapshotInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["budget", "today"],
+      "properties": {
+        "budget": { "$ref": "#/$defs/MonthlyBudget" },
+        "fixedExpenses": { "type": "array", "items": { "$ref": "#/$defs/FixedExpense" } },
+        "savingsGoals": { "type": "array", "items": { "$ref": "#/$defs/SavingsGoal" } },
+        "transactions": { "type": "array", "items": { "$ref": "#/$defs/DailyTransaction" } },
+        "today": { "$ref": "#/$defs/ISODate" },
+        "config": { "$ref": "#/$defs/EngineConfig" }
+      }
+    }
+  }
+}

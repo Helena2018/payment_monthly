@@ -1,0 +1,5 @@
+# 后端对账/结算包依赖（venv 安装：python -m venv .venv && .venv/bin/pip install -r backend/requirements.txt）
+pydantic>=2.7,<3
+pytest>=8.0
+# 仅测试用：校验 AI 助理输入契约（schemas/agent_input.schema.json）
+jsonschema>=4.20

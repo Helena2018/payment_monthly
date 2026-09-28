@@ -1,0 +1,16 @@
+{
+  "name": "@budget/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "月度预算 App 端侧权威计算引擎：纯函数、离线优先、整数分(cent)运算、零运行时依赖",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "typescript": "5.4.5"
+  }
+}
